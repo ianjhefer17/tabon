@@ -196,6 +196,7 @@ Opening Balance PHP 48,250.75
 Closing Balance PHP 97,058.22`
     expect(found(text)).toEqual([
       ['0123-4567-8901', 'account'],
+      ['Blk 12 Lot 5 Sampaguita St., Brgy. San Isidro, Angono, Rizal 1930', 'address'],
       ['0917 123 4567', 'phone'],
       ['juan.santos@example.com', 'email'],
     ])
@@ -217,6 +218,7 @@ Date Issued: 2023-07-01`
     expect(found(text)).toEqual([
       ['0028-1234567-8', 'id_number'],
       ['1992-03-14', 'date'],
+      ['Blk 12 Lot 5 Sampaguita St., Brgy. San Isidro,\nAngono, Rizal 1930', 'address'],
     ])
   })
 
@@ -248,5 +250,22 @@ Previous Reading 14,208 kWh
 TOTAL AMOUNT DUE PHP 3,184.60
 Due Date: Oct 12, 2026`
     expect(found(text)).toEqual([['3012-4455-67', 'account']])
+  })
+})
+
+describe('labeled address', () => {
+  const addr = (text: string) => detectRegex(text).filter((s) => s.type === 'address').map((s) => s.text)
+
+  it('takes the lines under an ADDRESS label, following trailing commas', () => {
+    const text = 'PHOTO 1992-03-14 M\nas ADDRESS\nBlk 12 Lot 5 Sampaguita St., Brgy. San Isidro,\nAngono, Rizal 1930\nSignature'
+    expect(addr(text)).toEqual(['Blk 12 Lot 5 Sampaguita St., Brgy. San Isidro,\nAngono, Rizal 1930'])
+  })
+  it('takes a value on the label line', () => {
+    expect(addr('Mailing Address: 45 Mabini St., Marikina City 1805\nBasic Pay 25,000.00')).toEqual([
+      '45 Mabini St., Marikina City 1805',
+    ])
+  })
+  it('ignores a label followed by another label', () => {
+    expect(addr('HOME ADDRESS\nMOBILE NO.')).toEqual([])
   })
 })

@@ -146,6 +146,40 @@ const DATE = [
   String.raw`(?:0?[1-9]|[12]\d|3[01])[ \t]+${MONTH},?[ \t]+(?:19|20)\d{2}`, // 14 Mar 1992
 ].join('|')
 
+/**
+ * Addresses after an "Address" label ("ADDRESS", "Mailing Address:", ...): the rest of the label's
+ * line, or the next line if the label stands alone, plus up to two more lines while a line ends
+ * with a comma ("Blk 12 Lot 5 Sampaguita St., Brgy. San Isidro," / "Angono, Rizal 1930").
+ * A backstop for the AI, which sometimes skips the address on ID cards.
+ */
+function addresses(raw: string): Candidate[] {
+  const out: Candidate[] = []
+  const lines: { start: number; text: string }[] = []
+  let pos = 0
+  for (const text of raw.split('\n')) {
+    lines.push({ start: pos, text })
+    pos += text.length + 1
+  }
+  lines.forEach((line, i) => {
+    const label = /\baddress\b:?/i.exec(line.text)
+    if (!label) return
+    const restStart = label.index + label[0].length
+    let j = i
+    let start = line.start + restStart + (line.text.slice(restStart).length - line.text.slice(restStart).trimStart().length)
+    if (!line.text.slice(restStart).trim()) {
+      j = i + 1
+      if (j >= lines.length) return
+      start = lines[j].start + (lines[j].text.length - lines[j].text.trimStart().length)
+    }
+    while (j < i + 3 && j + 1 < lines.length && lines[j].text.trimEnd().endsWith(',')) j++
+    const end = lines[j].start + lines[j].text.trimEnd().length
+    const value = raw.slice(start, end)
+    // Must look like an address, not another label: a digit or a comma.
+    if (end > start && /[\d,]/.test(value)) out.push({ start, end, type: 'address' })
+  })
+  return out
+}
+
 // Most specific first.
 const DETECTORS: Detector[] = [
   pattern('email', 'raw', String.raw`[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}`, 'email'),
@@ -182,6 +216,7 @@ const DETECTORS: Detector[] = [
   pattern('dob', 'norm', `${B}(?:${DATE})${E}`, 'date', 'gi', (m, raw) =>
     near(raw, m.index, m.index + m[0].length, BIRTH_WORDS) ? 'date' : null,
   ),
+  { name: 'address', on: 'raw', find: (_text, raw) => addresses(raw) },
 ]
 
 export function detectRegex(fullText: string): Span[] {
