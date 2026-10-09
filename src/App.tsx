@@ -7,6 +7,7 @@ import { SidePanel } from './components/SidePanel'
 import { StatusBar } from './components/StatusBar'
 import { runOcr, type OcrSource } from './lib/ocr'
 import { canvasToBlob, openPdf, type PdfDoc } from './lib/pdf'
+import { useUpdateReady } from './lib/pwa'
 import type { Box, Word } from './types'
 
 interface LoadedDoc {
@@ -35,6 +36,12 @@ function App() {
   const [status, setStatus] = useState(READY)
   const runId = useRef(0)
   const pdfRef = useRef<PdfDoc | null>(null)
+  const updateReady = useUpdateReady()
+
+  // A new version is ready: load it now if nothing is open; otherwise wait for "New document".
+  useEffect(() => {
+    if (updateReady && !doc) window.location.reload()
+  }, [updateReady, doc])
 
   // Release the previous object URL when the document changes.
   useEffect(() => () => {
@@ -118,6 +125,10 @@ function App() {
   }
 
   const clear = () => {
+    if (updateReady) {
+      window.location.reload()
+      return
+    }
     runId.current++
     closePdf()
     setDoc(null)
@@ -132,6 +143,11 @@ function App() {
         <main className="flex flex-1 flex-col p-6">
           {doc ? (
             <div>
+              {updateReady && (
+                <p className="mb-3 rounded-md border border-amber-400/40 bg-amber-400/10 px-3 py-2 text-sm text-amber-200">
+                  A new version of Tabon is ready. It will load when you click New document.
+                </p>
+              )}
               <div className="mb-3 flex items-center justify-between gap-3">
                 <span className="truncate text-sm text-gray-300">{doc.name}</span>
                 <div className="flex shrink-0 items-center gap-3">

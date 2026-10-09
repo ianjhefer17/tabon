@@ -10,7 +10,7 @@ export default defineConfig({
     tailwindcss(),
     VitePWA({
       registerType: 'autoUpdate',
-      injectRegister: false, // registered in main.tsx so updates reload the page
+      injectRegister: false, // registered in src/lib/pwa.ts so reloads never wipe an open document
       manifest: {
         name: 'Tabon — Private Document Redactor',
         short_name: 'Tabon',
@@ -24,7 +24,7 @@ export default defineConfig({
         // App shell + self-hosted OCR/pdf.js assets under /public are precached.
         globPatterns: ['**/*.{js,css,html,svg,png,wasm,mjs,gz,bcmap,pfb,ttf,icc}'],
         maximumFileSizeToCacheInBytes: 50 * 1024 * 1024,
-        // New versions take over immediately; registerSW in main.tsx then reloads the page.
+        // New versions take over immediately; src/lib/pwa.ts then decides when to reload.
         // (The plugin only sets these itself when it injects the register script.)
         skipWaiting: true,
         clientsClaim: true,

@@ -17,6 +17,7 @@ Vite + React + TypeScript, Tailwind CSS, tesseract.js, @mlc-ai/web-llm (model Qw
 
 ## Architecture
 src/lib/ocr.ts        -> OCR, returns words[] {text, bbox{x0,y0,x1,y1}, charStart, charEnd} + fullText
+src/lib/pdf.ts        -> renders PDF pages to a canvas with self-hosted pdf.js
 src/lib/regexPii.ts   -> PH-specific regex detectors, returns spans {start,end,type,source:'regex'}
 src/lib/llmPii.ts     -> WebLLM in a Web Worker, returns spans from exact substrings
 src/lib/match.ts      -> maps character spans -> word boxes, merges + dedupes
