@@ -17,7 +17,7 @@ npm run preview
 - tesseract.js + tesseract.js-core (in-browser OCR, WebAssembly), self-hosted under `public/tesseract/`
 - Tesseract `eng.traineddata` from tesseract-ocr/tessdata_fast (Apache-2.0), gzipped at `public/tesseract/lang/eng.traineddata.gz`
 - @mlc-ai/web-llm (in-browser LLM on WebGPU), models Qwen2.5-3B-Instruct-q4f16_1-MLC (fallback Qwen2.5-1.5B-Instruct-q4f16_1-MLC)
-- pdfjs-dist (PDF rendering)
+- pdfjs-dist (PDF rendering), with its worker, CMaps, standard fonts (Foxit, Liberation Sans) and image-decoder wasm (OpenJPEG, JBIG2, QCMS) self-hosted under `public/pdfjs/`
 - vite-plugin-pwa (offline caching)
 - oxlint (linting)
 - Python + Pillow (generating fictional sample documents)
@@ -25,7 +25,7 @@ npm run preview
 
 ## Offline assets
 
-`npm install` runs `scripts/copy-assets.mjs` (postinstall), which copies the Tesseract worker and core files from `node_modules` into `public/tesseract/`. The app never loads OCR code or data from a CDN.
+`npm install` runs `scripts/copy-assets.mjs` (postinstall), which copies the Tesseract worker and core files into `public/tesseract/` and the pdf.js worker and data into `public/pdfjs/`. The app never loads OCR or PDF code or data from a CDN, and the service worker caches all of it so the app works offline after the first visit.
 
 ## Sample documents
 
