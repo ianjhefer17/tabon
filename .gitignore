@@ -11,3 +11,7 @@ dist-ssr/
 .venv/
 __pycache__/
 .playwright-mcp/
+
+# Copied from node_modules by scripts/copy-assets.mjs (postinstall)
+public/tesseract/worker.min.js
+public/tesseract/core/

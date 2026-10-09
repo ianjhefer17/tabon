@@ -21,7 +21,7 @@ export default defineConfig({
       },
       workbox: {
         // App shell + self-hosted OCR/pdf.js assets under /public are precached.
-        globPatterns: ['**/*.{js,css,html,svg,png,wasm,mjs}'],
+        globPatterns: ['**/*.{js,css,html,svg,png,wasm,mjs,gz}'],
         maximumFileSizeToCacheInBytes: 50 * 1024 * 1024,
       },
     }),
