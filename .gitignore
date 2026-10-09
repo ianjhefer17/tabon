@@ -19,3 +19,4 @@ public/pdfjs/
 
 # AI model files downloaded by scripts/download-models.mjs (npm run models)
 models/
+.vercel
