@@ -1,4 +1,5 @@
 import { createWorker, type PSM, type Worker } from 'tesseract.js'
+import { detectRegex } from './regexPii'
 import type { Word } from '../types'
 import { ocrScale, sourceSize, type ImageSource } from './image'
 
@@ -121,42 +122,95 @@ async function recognizeImage(src: OcrSource, tuning: OcrTuning, onProgress?: Oc
     await worker.setParameters({ tessedit_pageseg_mode: tuning.psm as PSM })
     const { canvas, scale } = preprocess(src, width, height, tuning)
     const { data } = await worker.recognize(canvas, {}, { blocks: true, text: false })
+    let result = toWordsAndText(data, scale)
 
-    const words: Word[] = []
-    let fullText = ''
-    let lineCount = 0
-    for (const block of data.blocks ?? []) {
-      for (const para of block.paragraphs) {
-        for (const line of para.lines) {
-          const lineWords = line.words.filter((w) => w.text.trim() !== '')
-          if (lineWords.length === 0) continue
-          if (fullText) fullText += '\n'
-          const lineIndex = lineCount++
-          lineWords.forEach((w, i) => {
-            if (i > 0) fullText += ' '
-            const text = w.text.trim()
-            const charStart = fullText.length
-            fullText += text
-            words.push({
-              text,
-              charStart,
-              charEnd: fullText.length,
-              line: lineIndex,
-              bbox: {
-                x0: w.bbox.x0 / scale,
-                y0: w.bbox.y0 / scale,
-                x1: w.bbox.x1 / scale,
-                y1: w.bbox.y1 / scale,
-              },
-            })
-          })
-        }
-      }
+    // Passports: single-block reading (PSM 6) runs each row across the photo and hologram, which
+    // garbles the printed name fields. When a machine-readable zone shows this is a passport, read
+    // again with automatic layout (PSM 3), which keeps the name column separate.
+    if (tuning.psm === '6' && hasMrz(result.fullText)) {
+      onProgress?.(99, 'reading passport layout')
+      await worker.setParameters({ tessedit_pageseg_mode: '3' as PSM })
+      const second = await worker.recognize(canvas, {}, { blocks: true, text: false })
+      const auto = toWordsAndText(second.data, scale)
+      // Automatic layout can drop small isolated fields (the passport number in the corner), so
+      // keep the single-block lines holding a detection the second reading doesn't have.
+      if (hasMrz(auto.fullText)) result = withMissingLines(auto, result)
     }
 
     onProgress?.(100, 'done')
-    return { words, fullText, width, height }
+    return { ...result, width, height }
   } finally {
     currentProgress = undefined
   }
+}
+
+/** A line that looks like a passport MRZ: long, mostly A-Z/0-9/<, with a "<<" filler. */
+export function hasMrz(fullText: string): boolean {
+  return fullText.split('\n').some((line) => {
+    const c = line.replace(/\s+/g, '')
+    return c.length >= 25 && /[<«]{2}/.test(c) && c.replace(/[^A-Z0-9<«]/g, '').length >= c.length * 0.85
+  })
+}
+
+type RecognizeData = Awaited<ReturnType<Worker['recognize']>>['data']
+
+/** Flattens Tesseract blocks into words (in original image pixels) and '\n'-separated lines. */
+function toWordsAndText(data: RecognizeData, scale: number): { words: Word[]; fullText: string } {
+  const words: Word[] = []
+  let fullText = ''
+  let lineCount = 0
+  for (const block of data.blocks ?? []) {
+    for (const para of block.paragraphs) {
+      for (const line of para.lines) {
+        const lineWords = line.words.filter((w) => w.text.trim() !== '')
+        if (lineWords.length === 0) continue
+        if (fullText) fullText += '\n'
+        const lineIndex = lineCount++
+        lineWords.forEach((w, i) => {
+          if (i > 0) fullText += ' '
+          const text = w.text.trim()
+          const charStart = fullText.length
+          fullText += text
+          words.push({
+            text,
+            charStart,
+            charEnd: fullText.length,
+            line: lineIndex,
+            bbox: {
+              x0: w.bbox.x0 / scale,
+              y0: w.bbox.y0 / scale,
+              x1: w.bbox.x1 / scale,
+              y1: w.bbox.y1 / scale,
+            },
+          })
+        })
+      }
+    }
+  }
+  return { words, fullText }
+}
+
+/** `base` plus the lines of `other` that hold a rule detection whose text `base` lacks. */
+function withMissingLines(base: { words: Word[]; fullText: string }, other: { words: Word[]; fullText: string }) {
+  const flat = base.fullText.replace(/\s+/g, '')
+  const lines = new Set<number>()
+  for (const span of detectRegex(other.fullText)) {
+    if (flat.includes(span.text.replace(/\s+/g, ''))) continue
+    for (const w of other.words) if (w.charStart < span.end && span.start < w.charEnd) lines.add(w.line)
+  }
+  const words = [...base.words]
+  let fullText = base.fullText
+  let line = words.length ? words[words.length - 1].line + 1 : 0
+  for (const n of [...lines].sort((a, b) => a - b)) {
+    const lineWords = other.words.filter((w) => w.line === n)
+    if (fullText) fullText += '\n'
+    lineWords.forEach((w, i) => {
+      if (i > 0) fullText += ' '
+      const charStart = fullText.length
+      fullText += w.text
+      words.push({ ...w, charStart, charEnd: fullText.length, line })
+    })
+    line++
+  }
+  return { words, fullText }
 }

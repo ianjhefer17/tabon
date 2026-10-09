@@ -191,7 +191,7 @@ function addresses(raw: string): Candidate[] {
  * full name that is not on the page, so it can't be boxed.
  */
 const NAME_LABEL =
-  /\b(?:(?:last|first|middle|given|family|full|maiden|employee|customer|patient|member|applicant|account|holder'?s?)[ \t]*names?|surname|apelyido|pangalan|account[ \t]+holder|name)\b/gi
+  /\b(?:(?:last|first|middle|given|family|full|maiden|employee|customer|patient|member|applicant|account|holder'?s?)[ \t]*names?|surname|panggitnang(?:[ \t]+apel\w*)?|gitnang[ \t]+apel\w*|apel[iy]\w*|pangalan|account[ \t]+holder|name)\b/gi
 /** Words that end a name value: other field labels on the same line. */
 const NOT_NAME = new Set(
   ('name names last first middle given surname family full no no. number date sex birth place nationality address ' +
@@ -206,16 +206,23 @@ const NAME_PARTICLES = /^(?:de|del|dela|de\.|delos|los|las|la|san|sta\.?|y|van|v
  * Leading run of name-like words in `s` (offset into `s`), or null. Skips separators OCR makes
  * of arrows and colons (">", "»", "▶", ":") and stops at digits, labels, or after 6 words.
  */
-function nameValue(s: string): { start: number; end: number } | null {
+function nameValue(s: string, skipNoise = false): { start: number; end: number } | null {
   let start = -1
   let end = -1
   let words = 0
+  let skipped = 0
   for (const m of s.matchAll(/\S+/g)) {
     const tok = m[0]
     const bare = tok.replace(/[,;:]+$/, '')
     // Arrow / OCR junk before the value: ">", "»", "p>", a lone lowercase letter.
     if (start === -1 && (/^[^A-Za-zÀ-ÿ0-9]+$/.test(tok) || /^[a-z]$/.test(tok) || (tok.length <= 2 && /[^A-Za-z0-9]/.test(tok)))) continue
-    if (/\d|\//.test(tok) || NOT_NAME.has(bare.toLowerCase())) break
+    // A value line under its label may start with specks OCR read from the photo beside it ("q 3 ia").
+    // Two-letter surnames ("Go", "Uy", "NG") are kept.
+    if (start === -1 && skipNoise && skipped < 6 && tok.length <= 2 && !/^[A-Z][A-Za-z]?$/.test(tok)) {
+      skipped++
+      continue
+    }
+    if (/\d|\//.test(tok) || NOT_NAME.has(bare.toLowerCase().replace(/\.$/, ''))) break
     const isWord = /^[A-ZÀ-ÞÑ][A-Za-zÀ-ÿÑñ'.-]*$/.test(bare) || (start !== -1 && NAME_PARTICLES.test(bare))
     if (!isWord) break
     if (start === -1) start = m.index
@@ -236,7 +243,10 @@ function labeledNames(raw: string): Candidate[] {
     labels.forEach((label, k) => {
       const restStart = label.index + label[0].length
       const restEnd = k + 1 < labels.length ? labels[k + 1].index : line.text.length
-      const same = nameValue(line.text.slice(restStart, restEnd))
+      const rest = line.text.slice(restStart, restEnd)
+      // "Apelyido/Surname", "Pangalan/ Given names": a translated label follows, whether or not OCR
+      // read it well enough to match, so the value is on the next line.
+      const same = /^\s*\//.test(rest) ? null : nameValue(rest)
       if (same) {
         out.push({ start: line.start + restStart + same.start, end: line.start + restStart + same.end, type: 'name' })
         return
@@ -244,23 +254,76 @@ function labeledNames(raw: string): Candidate[] {
       // Label with nothing usable after it (or only another column's label): value on the next line.
       if (line.text.slice(restStart).match(/[A-Za-z]{2,}/) && k + 1 < labels.length) return
       const next = lines[i + 1]
-      const below = next && nameValue(next.text)
+      const below = next && nameValue(next.text, true)
       if (below) out.push({ start: next.start + below.start, end: next.start + below.end, type: 'name' })
     })
   })
   return out
 }
 
+/** Hamming distance for same-length strings (OCR misreads a character or two). */
+function differences(a: string, b: string): number {
+  let n = 0
+  for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) n++
+  return n
+}
+
 /**
- * Passport machine-readable zone: "P<PHLDELA<CRUZ<<JUAN<MIGUEL<<<<…" (name) and the line under
- * it holding the passport number and birth date. OCR may read "<" as "«".
+ * Passport machine-readable zone (MRZ), the two lines of "<" at the bottom:
+ *   P<PHLDELA<PAZ<<ANA<LUISA<<<<<<<<<<<<<<<<<<<   surname << given names
+ *   P1234567A8PHL9203145F3001012<<<<<<<<<<<<<<04   passport number, birth date, expiry
+ * OCR reads the "<" fillers as "«", "K" or "S" and adds spaces, so each MRZ line is boxed whole.
+ * The MRZ font is made for machines and reads far better than the photo-printed fields above it,
+ * so the surname, given names and passport number it spells out are also boxed wherever they
+ * appear elsewhere on the page.
  */
 function mrz(raw: string): Candidate[] {
   const out: Candidate[] = []
-  for (const m of raw.matchAll(/[A-Z0-9<«]*[<«]{2,}[A-Z0-9<«]*/g)) {
-    if (m[0].length < 20) continue
-    out.push({ start: m.index, end: m.index + m[0].length, type: /^P[<«A-Z]/.test(m[0]) && !/\d{6}/.test(m[0]) ? 'name' : 'id_number' })
-  }
+  const lines = splitLines(raw)
+  const mrzLines = new Set<number>()
+  const nameWords: string[] = []
+  let docNo = ''
+  lines.forEach((line, i) => {
+    const compact = line.text.replace(/\s+/g, '')
+    const mrzChars = compact.replace(/[^A-Z0-9<«]/g, '').length
+    if (compact.length < 25 || !/[<«]{2}/.test(compact) || mrzChars < compact.length * 0.85) return
+    mrzLines.add(i)
+    const first = line.text.search(/\S/)
+    const isNameLine = /^P[<«K][A-Z]{3}/.test(compact) && !/\d{6}/.test(compact)
+    out.push({ start: line.start + first, end: line.start + line.text.trimEnd().length, type: isNameLine ? 'name' : 'id_number' })
+    if (isNameLine) {
+      // Surname and given names, up to the filler run. "KKK"/"SSS" are misread fillers, not names.
+      const fields = compact.slice(5).split(/[<«]{2,}/).slice(0, 2)
+      for (const w of fields.join('<').split(/[<«]+/)) if (/^[A-Z]{2,}$/.test(w) && !/^[KSC]{3,}$/.test(w)) nameWords.push(w)
+    } else if (!docNo) {
+      const no = compact.slice(0, 9).replace(/[<«]+$/, '')
+      if (/^[A-Z0-9]{7,9}$/.test(no) && /\d{5}/.test(no)) docNo = no
+    }
+  })
+  if (!mrzLines.size) return out
+
+  lines.forEach((line, i) => {
+    if (mrzLines.has(i)) return
+    // Name words, merging neighbours on a line ("IAN JHEFER") into one span.
+    let run: Candidate | null = null
+    for (const m of line.text.matchAll(/[A-Za-zÀ-ÿÑñ]+/g)) {
+      const hit = nameWords.includes(m[0].toUpperCase())
+      const start = line.start + m.index
+      const end = start + m[0].length
+      if (hit && run && /^\s+$/.test(raw.slice(run.end, start))) run.end = end
+      else if (hit) out.push((run = { start, end, type: 'name' }))
+      else run = null
+    }
+    // Passport number, allowing one space and up to two misread characters.
+    if (docNo) {
+      for (const m of line.text.matchAll(/(?<![A-Za-z0-9])[A-Z0-9]{2,}(?:[ \t][A-Z0-9]{2,})?(?![A-Za-z0-9])/g)) {
+        const c = m[0].replace(/\s/g, '')
+        if (c.length === docNo.length && /\d{3}/.test(c) && differences(c, docNo) <= 2) {
+          out.push({ start: line.start + m.index, end: line.start + m.index + m[0].length, type: 'id_number' })
+        }
+      }
+    }
+  })
   return out
 }
 

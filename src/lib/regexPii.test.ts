@@ -342,3 +342,39 @@ describe('passport MRZ', () => {
     ])
   })
 })
+
+describe('passport read from a phone photo', () => {
+  // Shaped like real OCR of a hand-held passport photo (fictional data): fillers read as K/S,
+  // spaces inside the MRZ, a misread digit in the printed number, photo specks before a value.
+  const text = `REPUBLIKA NG PILIPINAS | REPUBLIC OF THE PHILIPPINES
+PHL Pasaporte blg/Passport no
+- P1234 562A, .
+Apelyido/Sumane
+DELA PAZ
+Pangalan/ Given oynes
+q 3 ia ANA LUISA
+Panggitnang apelyitio/Middle r ame
+SORIANO
+Petsa ng kapanganakan/Dote of birth
+14 MAR 1992
+P<PHLDELA<PAZ<<ANA<LU ISA<< KKK KKK SKK SK
+P1234567A8PHL92031 45F3001012<<<<<<<<<<<<<<04`
+  const all = found(text)
+
+  it('boxes both MRZ lines whole', () => {
+    expect(all).toContainEqual(['P<PHLDELA<PAZ<<ANA<LU ISA<< KKK KKK SKK SK', 'name'])
+    expect(all).toContainEqual(['P1234567A8PHL92031 45F3001012<<<<<<<<<<<<<<04', 'id_number'])
+  })
+  it('boxes the printed name and number the MRZ spells out', () => {
+    expect(all).toContainEqual(['ANA LUISA', 'name'])
+    expect(all).toContainEqual(['DELA PAZ', 'name'])
+    expect(all).toContainEqual(['SORIANO', 'name'])
+    expect(all).toContainEqual(['P1234 562A', 'id_number'])
+  })
+  it('does not mistake the translated label for a name', () => {
+    expect(all.map(([v]) => v)).not.toContain('Given')
+  })
+  it('does not take the next label as a name when the value line is unreadable', () => {
+    expect(found('Panggitnang apelyitio/Middle r ame a Ns\n, f; a Petsa. ng kapanganakan/Dote of birth')).toEqual([])
+  })
+})
