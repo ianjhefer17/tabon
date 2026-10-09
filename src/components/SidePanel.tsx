@@ -1,6 +1,7 @@
 import type { LlmState } from '../hooks/useLlm'
 import { MODELS, type ModelKey } from '../lib/llmPii'
 import type { RedactStyle } from '../lib/redact'
+import { PRESETS, PRESET_KEYS, type PresetKey } from '../lib/presets'
 import { SOURCE_LABEL, TYPE_COLOR, TYPE_LABEL, maskText } from '../lib/piiStyle'
 import type { Box } from '../types'
 
@@ -12,6 +13,8 @@ interface SidePanelProps {
   boxes: Box[]
   onToggle: (group: string) => void
   onSetAll: (enabled: boolean) => void
+  preset: PresetKey
+  onPresetChange: (key: PresetKey) => void
   aiPhase: AiPhase
   llm: LlmState
   onModelChange: (key: ModelKey) => void
@@ -53,6 +56,8 @@ export function SidePanel({
   boxes,
   onToggle,
   onSetAll,
+  preset,
+  onPresetChange,
   aiPhase,
   llm,
   onModelChange,
@@ -69,7 +74,23 @@ export function SidePanel({
 
   return (
     <aside className="w-full border-t border-gray-800 p-4 md:w-80 md:border-t-0 md:border-l">
-      <h2 className="text-sm font-semibold tracking-wide text-gray-300 uppercase">Detected info</h2>
+      <label className="block text-xs text-gray-400">
+        Sending to…
+        <select
+          value={preset}
+          onChange={(e) => onPresetChange(e.target.value as PresetKey)}
+          className="mt-1 block w-full rounded-md border border-gray-700 bg-gray-900 px-2 py-1.5 text-sm text-gray-200"
+        >
+          {PRESET_KEYS.map((k) => (
+            <option key={k} value={k}>
+              {PRESETS[k].label}
+            </option>
+          ))}
+        </select>
+        <span className="mt-1 block text-[11px] text-gray-500">{PRESETS[preset].reason}</span>
+      </label>
+
+      <h2 className="mt-5 text-sm font-semibold tracking-wide text-gray-300 uppercase">Detected info</h2>
 
       {phase === 'empty' && <p className="mt-3 text-sm text-gray-500">No document loaded yet.</p>}
       {phase === 'reading' && <p className="mt-3 text-sm text-gray-500">Reading the document…</p>}

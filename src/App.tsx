@@ -19,6 +19,7 @@ import { canvasToBlob, imagesToPdf, openPdf, type PdfDoc } from './lib/pdf'
 import { useUpdateReady } from './lib/pwa'
 import { copyPng, downloadBlob, redactImage, redactedFileName, redactedPdfName, toPngBlob, type RedactStyle } from './lib/redact'
 import { detectRegex } from './lib/regexPii'
+import { applyPreset, type PresetKey } from './lib/presets'
 import type { BBox, Box, Span, Word } from './types'
 
 interface LoadedDoc {
@@ -92,6 +93,10 @@ function App() {
   const [aiPhase, setAiPhase] = useState<AiPhase>('idle')
   const [timings, setTimings] = useState<Timings>({})
   const [redactStyle, setRedactStyle] = useState<RedactStyle>('black')
+  const [preset, setPreset] = useState<PresetKey>('everything')
+  /** Read by async scans so new detections get the current preset's defaults. */
+  const presetRef = useRef(preset)
+  presetRef.current = preset
   const [drawing, setDrawing] = useState(false)
   const [showPrivacy, setShowPrivacy] = useState(false)
   const [exporting, setExporting] = useState(false)
@@ -132,7 +137,7 @@ function App() {
     detectLlm(fullText, () => run !== aiRun.current)
       .then((spans) => {
         if (run !== aiRun.current) return
-        const found = llmBoxes(spans, fullText, words)
+        const found = applyPreset(llmBoxes(spans, fullText, words), presetRef.current)
         setBoxes((bs) => mergeBoxes([...bs.filter((b) => b.source !== 'llm'), ...found]))
         setTimings((t) => ({ ...t, ai: performance.now() - t0 }))
         setAiPhase('done')
@@ -259,7 +264,7 @@ function App() {
     if (id !== runId.current) return
     // Stage 2: rule-based boxes appear immediately; the LLM scan (effect above) adds to them.
     const tRules = performance.now()
-    const found = mergeBoxes(spansToBoxes(detectRegex(result.fullText), result.words))
+    const found = applyPreset(mergeBoxes(spansToBoxes(detectRegex(result.fullText), result.words)), presetRef.current)
     setTimings({ ocr: tRules - tOcr, rules: performance.now() - tRules })
     setWords(result.words)
     setFullText(result.fullText)
@@ -421,6 +426,7 @@ function App() {
             aiPhase = 'off'
           }
           if (session !== pdfSession.current) return
+          pageBoxes = applyPreset(pageBoxes, presetRef.current)
           const state: PageState = { words: result.words, fullText: result.fullText, boxes: pageBoxes, aiPhase, timings: {} }
           setPages((prev) => new Map(prev).set(n, state))
         }
@@ -459,6 +465,12 @@ function App() {
   const closePreview = useCallback(() => setPreview(null), [])
 
   const setAll = (enabled: boolean) => setBoxes((bs) => bs.map((b) => ({ ...b, enabled })))
+  // A new preset resets every box (this page and other scanned PDF pages) to its defaults; toggles still work after.
+  const changePreset = (key: PresetKey) => {
+    setPreset(key)
+    setBoxes((bs) => applyPreset(bs, key))
+    setPages((prev) => new Map([...prev].map(([n, p]) => [n, { ...p, boxes: applyPreset(p.boxes, key) }])))
+  }
   const phase: PanelPhase = !doc ? 'empty' : ocrDone ? 'done' : 'reading'
 
   // Status bar: progress/errors from `status` until OCR is done, then a summary plus stage timings.
@@ -551,6 +563,8 @@ function App() {
           boxes={boxes}
           onToggle={toggleGroup}
           onSetAll={setAll}
+          preset={preset}
+          onPresetChange={changePreset}
           aiPhase={aiPhase}
           llm={llm}
           onModelChange={changeModel}
