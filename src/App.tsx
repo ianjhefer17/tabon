@@ -16,6 +16,7 @@ import { detectLlm, type ModelKey } from './lib/llmPii'
 import { dropCoveredSpans, mergeBoxes, spansToBoxes } from './lib/match'
 import { runOcr, type OcrSource } from './lib/ocr'
 import { canvasToBlob, imagesToPdf, openPdf, type PdfDoc } from './lib/pdf'
+import { decodeImage, isSupportedImage, type ImageSource } from './lib/image'
 import { useUpdateReady } from './lib/pwa'
 import { copyPng, downloadBlob, redactImage, redactedFileName, redactedPdfName, toPngBlob, type RedactStyle } from './lib/redact'
 import { detectRegex } from './lib/regexPii'
@@ -104,6 +105,10 @@ function App() {
   const [copyStatus, setCopyStatus] = useState('')
   const [preview, setPreview] = useState<Preview | null>(null)
   const runId = useRef(0)
+  /** Upright decoded pixels of the open photo (not set for PDFs); OCR and export use these. */
+  const imageRef = useRef<ImageSource | null>(null)
+  /** Blocks a second export/copy while one runs (double-click). */
+  const busy = useRef(false)
   const manualCount = useRef(0)
   /** Bumped whenever an AI scan result must be ignored (new document, new model). */
   const aiRun = useRef(0)
@@ -191,7 +196,26 @@ function App() {
   const resetExport = () => {
     setDrawing(false)
     setExportStatus('')
+    setCopyStatus('')
     setPreview(null)
+  }
+
+  // Drops every detection of the open document, so nothing stale can carry over to the next one.
+  const resetScan = () => {
+    stopAi()
+    resetExport()
+    setWords([])
+    setFullText('')
+    setBoxes([])
+    setOcrDone(false)
+    setAiPhase('idle')
+    setTimings({})
+  }
+
+  const releaseImage = () => {
+    const img = imageRef.current
+    if (img && 'close' in img) img.close()
+    imageRef.current = null
   }
 
   const closePdf = () => {
@@ -246,15 +270,8 @@ function App() {
 
   // Shows the page image and runs OCR on it. `source` is the full-resolution pixels.
   const showAndOcr = async (id: number, next: LoadedDoc, source: OcrSource) => {
-    stopAi()
-    resetExport()
+    resetScan()
     setDoc(next)
-    setWords([])
-    setFullText('')
-    setBoxes([])
-    setOcrDone(false)
-    setAiPhase('idle')
-    setTimings({})
     const label = next.numPages ? `${next.name} (page ${next.page} of ${next.numPages})` : next.name
     setStatus(`Reading text from ${label}… 0%`)
     const tOcr = performance.now()
@@ -270,7 +287,8 @@ function App() {
     setFullText(result.fullText)
     setBoxes(found)
     setOcrDone(true)
-    setAiPhase('waiting')
+    // Blank image: no text for the AI to read.
+    setAiPhase(result.fullText.trim() ? 'waiting' : 'done')
   }
 
   const showPdfPage = async (id: number, pdf: PdfDoc, name: string, page: number) => {
@@ -297,10 +315,19 @@ function App() {
   }
 
   const handleFile = async (file: File) => {
+    const isPdf = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')
+    if (!isPdf && !isSupportedImage(file)) {
+      // Leave the open document untouched.
+      setStatus(`Unsupported file type: ${file.type || file.name}. Use PNG, JPG or PDF.`)
+      return
+    }
     const id = ++runId.current
+    // Clear the previous document's detections now: a scan finishing during the load must not leak into the new one.
+    resetScan()
     closePdf()
+    releaseImage()
     try {
-      if (file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')) {
+      if (isPdf) {
         setStatus(`Opening ${file.name}…`)
         const pdf = await openPdf(file)
         if (id !== runId.current) {
@@ -310,16 +337,17 @@ function App() {
         pdfRef.current = pdf
         void loadThumbs(pdf)
         await showPdfPage(id, pdf, file.name, 1)
-      } else if (file.type === 'image/png' || file.type === 'image/jpeg') {
-        const url = URL.createObjectURL(file)
-        const img = await loadImage(url)
+      } else {
+        setStatus(`Opening ${file.name}…`)
+        // Upright pixels (EXIF rotation applied), so sideways phone photos OCR and export correctly.
+        const img = await decodeImage(file)
         if (id !== runId.current) {
-          URL.revokeObjectURL(url)
+          if ('close' in img) img.close()
           return
         }
-        await showAndOcr(id, { url, name: file.name, width: img.naturalWidth, height: img.naturalHeight }, img)
-      } else {
-        setStatus(`Unsupported file type: ${file.type || file.name}. Use PNG, JPG or PDF.`)
+        imageRef.current = img
+        const { width, height } = 'naturalWidth' in img ? { width: img.naturalWidth, height: img.naturalHeight } : img
+        await showAndOcr(id, { url: URL.createObjectURL(file), name: file.name, width, height }, img)
       }
     } catch (err) {
       fail(id, file.name, err)
@@ -343,16 +371,10 @@ function App() {
       return
     }
     runId.current++
-    stopAi()
+    resetScan()
     closePdf()
-    resetExport()
+    releaseImage()
     setDoc(null)
-    setWords([])
-    setFullText('')
-    setBoxes([])
-    setOcrDone(false)
-    setAiPhase('idle')
-    setTimings({})
     setStatus(READY)
   }
 
@@ -369,24 +391,32 @@ function App() {
   // Full-resolution redacted PNG of the current page, from the original pixels (not the preview).
   const buildPng = async (): Promise<Blob> => {
     if (!doc) throw new Error('No document loaded')
-    const img = await loadImage(doc.url)
+    const img = imageRef.current ?? (await loadImage(doc.url))
     return toPngBlob(redactImage(img, boxes, redactStyle))
   }
 
+  // The buttons are disabled too; never save an "unredacted redaction".
+  const nothingSelected = !boxes.some((b) => b.enabled)
+
   const exportPng = async () => {
-    if (!doc) return
+    if (!doc || busy.current || nothingSelected) return
+    const id = runId.current
+    busy.current = true
     setExporting(true)
     setExportStatus('')
     try {
       const blob = await buildPng()
+      // Another document was opened meanwhile: drop this result.
+      if (id !== runId.current) return
       const fileName = redactedFileName(doc.name, doc.page, doc.numPages)
       downloadBlob(blob, fileName)
       setCopyStatus('')
       setPreview({ url: URL.createObjectURL(blob), blob, fileName })
     } catch (err) {
       console.error(err)
-      setExportStatus(`Could not export: ${err instanceof Error ? err.message : String(err)}`)
+      if (id === runId.current) setExportStatus(`Could not export: ${err instanceof Error ? err.message : String(err)}`)
     } finally {
+      busy.current = false
       setExporting(false)
     }
   }
@@ -394,9 +424,10 @@ function App() {
   // Every page redacted into one image-only PDF. Pages not scanned yet are scanned here first.
   const exportAllPages = async () => {
     const pdf = pdfRef.current
-    if (!pdf || !doc?.page) return
+    if (!pdf || !doc?.page || busy.current) return
     const session = pdfSession.current
     const total = pdf.numPages
+    busy.current = true
     setExporting(true)
     setExportStatus('')
     try {
@@ -447,6 +478,7 @@ function App() {
       console.error(err)
       if (session === pdfSession.current) setExportStatus(`Could not export: ${err instanceof Error ? err.message : String(err)}`)
     } finally {
+      busy.current = false
       setExporting(false)
     }
   }
@@ -479,12 +511,17 @@ function App() {
   if (doc && ocrDone) {
     const count = new Set(boxes.map((b) => b.group)).size
     const label = doc.numPages ? `${doc.name} (page ${doc.page} of ${doc.numPages})` : doc.name
-    message = `Found ${count} possible personal ${count === 1 ? 'detail' : 'details'} in ${label}. Review before sharing.`
+    message =
+      words.length === 0
+        ? `No text found in ${label} — review manually.`
+        : count === 0
+          ? `No personal info found in ${label} — review manually.`
+          : `Found ${count} possible personal ${count === 1 ? 'detail' : 'details'} in ${label}. Review before sharing.`
     const ai = {
       idle: '',
       waiting: llm.status === 'loading' ? `AI waiting for model (${llm.progress?.percent ?? 0}%)` : 'AI waiting…',
       scanning: 'AI scanning…',
-      done: `AI ${formatMs(timings.ai ?? 0)}`,
+      done: words.length === 0 ? 'AI skipped (no text)' : `AI ${formatMs(timings.ai ?? 0)}`,
       off: 'AI off (rules only)',
       failed: 'AI failed (rules only)',
     }[aiPhase]
@@ -560,6 +597,7 @@ function App() {
         </main>
         <SidePanel
           phase={phase}
+          noText={ocrDone && words.length === 0}
           boxes={boxes}
           onToggle={toggleGroup}
           onSetAll={setAll}
@@ -572,7 +610,7 @@ function App() {
           onRedactStyleChange={setRedactStyle}
           onExport={exportPng}
           onExportAll={doc?.numPages && doc.numPages > 1 ? exportAllPages : undefined}
-          onCopy={() => copy(buildPng(), setExportStatus)}
+          onCopy={() => !nothingSelected && copy(buildPng(), setExportStatus)}
           exporting={exporting}
           exportStatus={exportStatus}
         />

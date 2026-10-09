@@ -184,6 +184,8 @@ const CHUNK_SIZE = 2000
 
 /** Splits long text into ~CHUNK_SIZE pieces on line boundaries; short text stays whole. */
 export function chunkText(text: string): string[] {
+  // No text (blank page): nothing to ask the model.
+  if (!text.trim()) return []
   if (text.length <= CHUNK_THRESHOLD) return [text]
   const chunks: string[] = []
   let current = ''

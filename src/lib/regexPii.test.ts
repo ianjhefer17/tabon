@@ -269,3 +269,13 @@ describe('labeled address', () => {
     expect(addr('HOME ADDRESS\nMOBILE NO.')).toEqual([])
   })
 })
+
+describe('non-English text', () => {
+  it('finds nothing in text with no PII and does not throw', () => {
+    expect(found('')).toEqual([])
+    expect(found('Ang bayan ko ay maganda. 日本語のテキスト Ñoño café')).toEqual([])
+  })
+  it('still finds a number next to non-English words', () => {
+    expect(found('Numero ng telepono: 0917 123 4567 — salamat')).toEqual([['0917 123 4567', 'phone']])
+  })
+})

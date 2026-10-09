@@ -1,4 +1,5 @@
 import type { BBox, Box } from '../types'
+import { sourceSize, type ImageSource } from './image'
 
 export type RedactStyle = 'black' | 'pixelate'
 
@@ -47,9 +48,8 @@ function pixelate(ctx: CanvasRenderingContext2D, x: number, y: number, w: number
  * Draws the original image at full resolution and covers every enabled box.
  * Only pixels end up in the canvas, so the PNG made from it carries no EXIF/GPS metadata.
  */
-export function redactImage(original: HTMLImageElement, boxes: Box[], style: RedactStyle = 'black'): HTMLCanvasElement {
-  const width = original.naturalWidth
-  const height = original.naturalHeight
+export function redactImage(original: ImageSource, boxes: Box[], style: RedactStyle = 'black'): HTMLCanvasElement {
+  const { width, height } = sourceSize(original)
   const canvas = document.createElement('canvas')
   canvas.width = width
   canvas.height = height

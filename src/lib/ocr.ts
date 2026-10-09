@@ -1,5 +1,6 @@
 import { createWorker, type PSM, type Worker } from 'tesseract.js'
 import type { Word } from '../types'
+import { ocrScale, sourceSize, type ImageSource } from './image'
 
 export interface OcrResult {
   words: Word[]
@@ -11,11 +12,11 @@ export interface OcrResult {
 
 export type OcrProgress = (percent: number, status: string) => void
 
-export type OcrSource = HTMLImageElement | HTMLCanvasElement | ImageBitmap
+export type OcrSource = ImageSource
 
 /** Preprocessing and segmentation settings. DEFAULT_TUNING is what the app uses. */
 export interface OcrTuning {
-  /** Upscale so the image is at least this wide (never downscales). */
+  /** Upscale so the image is at least this wide. Huge images are downscaled instead (see ocrScale). */
   minWidth: number
   /** Gray level 0-255 to binarize at before OCR, or null to let Tesseract threshold. */
   binarize: number | null
@@ -81,14 +82,9 @@ function getWorker(): Promise<Worker> {
   return workerPromise
 }
 
-function sourceSize(src: OcrSource): { width: number; height: number } {
-  if (src instanceof HTMLImageElement) return { width: src.naturalWidth, height: src.naturalHeight }
-  return { width: src.width, height: src.height }
-}
-
-/** Draws the image upscaled to at least tuning.minWidth, in grayscale, optionally binarized. */
+/** Draws the image at OCR size (see ocrScale), in grayscale, optionally binarized. */
 function preprocess(src: OcrSource, width: number, height: number, tuning: OcrTuning): { canvas: HTMLCanvasElement; scale: number } {
-  const scale = Math.max(1, tuning.minWidth / width)
+  const scale = ocrScale(width, height, tuning.minWidth)
   const canvas = document.createElement('canvas')
   canvas.width = Math.round(width * scale)
   canvas.height = Math.round(height * scale)

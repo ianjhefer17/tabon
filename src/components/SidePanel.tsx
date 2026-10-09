@@ -10,6 +10,8 @@ export type AiPhase = 'idle' | 'waiting' | 'scanning' | 'done' | 'off' | 'failed
 
 interface SidePanelProps {
   phase: PanelPhase
+  /** OCR finished but read no text at all (blank or unreadable image). */
+  noText: boolean
   boxes: Box[]
   onToggle: (group: string) => void
   onSetAll: (enabled: boolean) => void
@@ -53,6 +55,7 @@ function detections(boxes: Box[]): Detection[] {
 
 export function SidePanel({
   phase,
+  noText,
   boxes,
   onToggle,
   onSetAll,
@@ -95,7 +98,11 @@ export function SidePanel({
       {phase === 'empty' && <p className="mt-3 text-sm text-gray-500">No document loaded yet.</p>}
       {phase === 'reading' && <p className="mt-3 text-sm text-gray-500">Reading the document…</p>}
       {phase === 'done' && items.length === 0 && (
-        <p className="mt-3 text-sm text-gray-400">No personal info found by the rules. Check the document yourself before sharing.</p>
+        <p className="mt-3 text-sm text-gray-400">
+          {noText && 'No text could be read from this image. '}
+          No personal info found — review manually.
+          {aiPhase === 'scanning' || aiPhase === 'waiting' ? ' The AI scan may still add detections.' : ''}
+        </p>
       )}
 
       {items.length > 0 && (
@@ -165,11 +172,14 @@ export function SidePanel({
           <button
             type="button"
             onClick={onExport}
-            disabled={exporting}
+            disabled={exporting || selected === 0}
             className="mt-3 w-full rounded-md bg-emerald-500 px-4 py-3 text-base font-semibold text-gray-950 hover:bg-emerald-400 disabled:opacity-60"
           >
             {exporting ? 'Redacting…' : onExportAll ? 'Redact & Download this page' : 'Redact & Download'}
           </button>
+          {selected === 0 && (
+            <p className="mt-2 text-[11px] text-amber-400">Nothing is selected: tick a detection or use Draw box to cover something.</p>
+          )}
           {onExportAll && (
             <button
               type="button"
@@ -183,7 +193,7 @@ export function SidePanel({
           <button
             type="button"
             onClick={onCopy}
-            disabled={exporting}
+            disabled={exporting || selected === 0}
             className="mt-2 w-full rounded-md border border-gray-700 px-4 py-2 text-sm hover:border-gray-500 disabled:opacity-60"
           >
             Copy to clipboard

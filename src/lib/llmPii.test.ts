@@ -2,6 +2,11 @@ import { describe, expect, it } from 'vitest'
 import { chunkText, itemsToSpans, parseLlmJson } from './llmPii'
 
 describe('chunkText', () => {
+  it('returns no chunks for blank text, so the model is not asked about an empty page', () => {
+    expect(chunkText('')).toEqual([])
+    expect(chunkText(' \n ')).toEqual([])
+  })
+
   it('keeps text up to 2500 chars whole', () => {
     const text = 'a'.repeat(2500)
     expect(chunkText(text)).toEqual([text])

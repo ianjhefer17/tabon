@@ -77,8 +77,10 @@ export function DocumentView({ src, width, height, words, boxes, showWords, onTo
 
   return (
     <div className="relative mx-auto w-full max-w-3xl overflow-hidden rounded-lg border border-gray-800 bg-white">
-      <img src={src} alt="Loaded document" className="block h-auto w-full" />
-      <canvas ref={canvasRef} width={width} height={height} className="pointer-events-none absolute inset-0 h-full w-full" />
+      {/* from-image (the browser default) keeps the display upright like the decoded pixels OCR and export use. */}
+      <img src={src} alt="Loaded document" className="block h-auto w-full" style={{ imageOrientation: 'from-image' }} />
+      {/* Debug only: a full-size canvas of a 6000px photo would waste ~200 MB. */}
+      {showWords && <canvas ref={canvasRef} width={width} height={height} className="pointer-events-none absolute inset-0 h-full w-full" />}
       <svg
         ref={svgRef}
         viewBox={`0 0 ${width} ${height}`}
