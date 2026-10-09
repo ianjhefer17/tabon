@@ -145,7 +145,8 @@ describe('bank account (context)', () => {
     expectOnly('A/C 1234 5678 90', '1234 5678 90', 'account')
   })
   it('uses the label on the line above', () => {
-    expectOnly('CUSTOMER NAME ACCOUNT NO.\nJUAN MIGUEL DELA CRUZ SANTOS 3012-4455-67', '3012-4455-67', 'account')
+    const accounts = detectRegex('CUSTOMER NAME ACCOUNT NO.\nJUAN MIGUEL DELA CRUZ SANTOS 3012-4455-67').filter((s) => s.type === 'account')
+    expect(accounts.map((s) => s.text)).toEqual(['3012-4455-67'])
   })
   it('rejects runs without account words, and amounts', () => {
     expect(found('Reference 0012345678 issued')).toEqual([])
@@ -195,6 +196,7 @@ Opening Balance 48 250.75
 Opening Balance PHP 48,250.75
 Closing Balance PHP 97,058.22`
     expect(found(text)).toEqual([
+      ['JUAN MIGUEL DELA CRUZ SANTOS', 'name'],
       ['0123-4567-8901', 'account'],
       ['Blk 12 Lot 5 Sampaguita St., Brgy. San Isidro, Angono, Rizal 1930', 'address'],
       ['0917 123 4567', 'phone'],
@@ -217,6 +219,7 @@ Signature
 Date Issued: 2023-07-01`
     expect(found(text)).toEqual([
       ['0028-1234567-8', 'id_number'],
+      ['JUAN MIGUEL DELA CRUZ SANTOS', 'name'],
       ['1992-03-14', 'date'],
       ['Blk 12 Lot 5 Sampaguita St., Brgy. San Isidro,\nAngono, Rizal 1930', 'address'],
     ])
@@ -237,7 +240,7 @@ Basic Pay 35,000.00
 Gross Pay 37,520.45
 NET PAY PHP 32,451.00`
     const values = found(text).map(([v]) => v)
-    expect(values).toEqual(['123-456-789-000', '34-1234567-8', '12-345678901-2', '1234-5678-9012', '0123-4567-8901'])
+    expect(values).toEqual(['JUAN MIGUEL DELA CRUZ SANTOS', '123-456-789-000', '34-1234567-8', '12-345678901-2', '1234-5678-9012', '0123-4567-8901'])
   })
 
   it('utility bill', () => {
@@ -249,7 +252,10 @@ Aug 28, 2026 — Sep 27, 2026 MPC-88214093
 Previous Reading 14,208 kWh
 TOTAL AMOUNT DUE PHP 3,184.60
 Due Date: Oct 12, 2026`
-    expect(found(text)).toEqual([['3012-4455-67', 'account']])
+    expect(found(text)).toEqual([
+      ['JUAN MIGUEL DELA CRUZ SANTOS', 'name'],
+      ['3012-4455-67', 'account'],
+    ])
   })
 })
 
@@ -277,5 +283,62 @@ describe('non-English text', () => {
   })
   it('still finds a number next to non-English words', () => {
     expect(found('Numero ng telepono: 0917 123 4567 — salamat')).toEqual([['0917 123 4567', 'phone']])
+  })
+})
+
+describe('labeled names', () => {
+  const names = (text: string) => detectRegex(text).filter((s) => s.type === 'name').map((s) => s.text)
+
+  it('PRC card: value after an arrow on the label line, however OCR reads the arrow', () => {
+    const text = `Republic of the Philippines
+PROFESSIONAL REGULATION COMMISSION
+LAST NAME ▶ DELA PAZ
+FIRST NAME > ANA LUISA
+MIDDLE NAME » SORIANO
+REGISTRATION NO. ▶ 0012345
+REGISTRATION DATE ▶ 11/13/2019`
+    expect(names(text)).toEqual(['DELA PAZ', 'ANA LUISA', 'SORIANO'])
+    expect(found(text)).toContainEqual(['0012345', 'id_number'])
+  })
+  it('PRC card as read in the browser: arrows as "p>", label words run together', () => {
+    const text = 'LAST NAME p> DELA PAZ\nREGISTRATIONNO. p> 0012345\nREGISTRATION DATE > 11/13/2019'
+    expect(found(text)).toEqual([
+      ['DELA PAZ', 'name'],
+      ['0012345', 'id_number'],
+    ])
+  })
+  it('passport: bilingual labels with the value on the next line', () => {
+    const text = `Apelyido/Surname
+DELA PAZ
+Mga Pangalan/Given names
+ANA LUISA
+Panggitnang apelyido/Middle name
+SORIANO
+Petsa ng kapanganakan/Date of birth
+14 MAR 1992`
+    expect(names(text)).toEqual(['DELA PAZ', 'ANA LUISA', 'SORIANO'])
+    expect(found(text)).toContainEqual(['14 MAR 1992', 'date'])
+  })
+  it('a header row of name labels takes the whole value row', () => {
+    expect(names('LAST NAME FIRST NAME MIDDLE NAME\nDELA PAZ ANA LUISA SORIANO\nSEX M')).toEqual(['DELA PAZ ANA LUISA SORIANO'])
+  })
+  it('stops at the next column and at digits', () => {
+    expect(names('CUSTOMER NAME ACCOUNT NO.\nJUAN DELA CRUZ 3012-4455-67')).toEqual(['JUAN DELA CRUZ'])
+    expect(names('Name: Maria dela Cruz Date: 2026-01-01')).toEqual(['Maria dela Cruz'])
+  })
+  it('ignores labels with no name after them', () => {
+    expect(names('NAME\nDATE OF BIRTH')).toEqual([])
+    expect(names('Name of company')).toEqual([])
+    expect(names('NAME\n0917 123 4567')).toEqual([])
+  })
+})
+
+describe('passport MRZ', () => {
+  it('boxes both machine-readable lines', () => {
+    const text = 'P<PHLDELA<PAZ<<ANA<LUISA<<<<<<<<<<<<<<<<<<<\nP1234567A8PHL9203145F3001012<<<<<<<<<<<<<<04'
+    expect(found(text)).toEqual([
+      ['P<PHLDELA<PAZ<<ANA<LUISA<<<<<<<<<<<<<<<<<<<', 'name'],
+      ['P1234567A8PHL9203145F3001012<<<<<<<<<<<<<<04', 'id_number'],
+    ])
   })
 })

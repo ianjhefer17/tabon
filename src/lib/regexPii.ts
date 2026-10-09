@@ -146,6 +146,16 @@ const DATE = [
   String.raw`(?:0?[1-9]|[12]\d|3[01])[ \t]+${MONTH},?[ \t]+(?:19|20)\d{2}`, // 14 Mar 1992
 ].join('|')
 
+function splitLines(raw: string): { start: number; text: string }[] {
+  const lines: { start: number; text: string }[] = []
+  let pos = 0
+  for (const text of raw.split('\n')) {
+    lines.push({ start: pos, text })
+    pos += text.length + 1
+  }
+  return lines
+}
+
 /**
  * Addresses after an "Address" label ("ADDRESS", "Mailing Address:", ...): the rest of the label's
  * line, or the next line if the label stands alone, plus up to two more lines while a line ends
@@ -154,12 +164,7 @@ const DATE = [
  */
 function addresses(raw: string): Candidate[] {
   const out: Candidate[] = []
-  const lines: { start: number; text: string }[] = []
-  let pos = 0
-  for (const text of raw.split('\n')) {
-    lines.push({ start: pos, text })
-    pos += text.length + 1
-  }
+  const lines = splitLines(raw)
   lines.forEach((line, i) => {
     const label = /\baddress\b:?/i.exec(line.text)
     if (!label) return
@@ -180,8 +185,88 @@ function addresses(raw: string): Candidate[] {
   return out
 }
 
+/**
+ * Name field labels. ID cards and passports split the name into labelled parts ("LAST NAME ▶
+ * GUEVARRA", "Apelyido/Surname" over "DELA CRUZ"), which the AI tends to return joined into one
+ * full name that is not on the page, so it can't be boxed.
+ */
+const NAME_LABEL =
+  /\b(?:(?:last|first|middle|given|family|full|maiden|employee|customer|patient|member|applicant|account|holder'?s?)[ \t]*names?|surname|apelyido|pangalan|account[ \t]+holder|name)\b/gi
+/** Words that end a name value: other field labels on the same line. */
+const NOT_NAME = new Set(
+  ('name names last first middle given surname family full no no. number date sex birth place nationality address ' +
+    'account holder employee customer position registration reg valid until issued expiry tin sss mobile email ' +
+    'photo signature crn id type code country apelyido pangalan panggitnang gitnang mga petsa kapanganakan ' +
+    'kasarian nasyonalidad lugar profession occupation status').split(' '),
+)
+/** Name particles that may be lowercase: "Juan dela Cruz". */
+const NAME_PARTICLES = /^(?:de|del|dela|de\.|delos|los|las|la|san|sta\.?|y|van|von|da|dos)$/i
+
+/**
+ * Leading run of name-like words in `s` (offset into `s`), or null. Skips separators OCR makes
+ * of arrows and colons (">", "»", "▶", ":") and stops at digits, labels, or after 6 words.
+ */
+function nameValue(s: string): { start: number; end: number } | null {
+  let start = -1
+  let end = -1
+  let words = 0
+  for (const m of s.matchAll(/\S+/g)) {
+    const tok = m[0]
+    const bare = tok.replace(/[,;:]+$/, '')
+    // Arrow / OCR junk before the value: ">", "»", "p>", a lone lowercase letter.
+    if (start === -1 && (/^[^A-Za-zÀ-ÿ0-9]+$/.test(tok) || /^[a-z]$/.test(tok) || (tok.length <= 2 && /[^A-Za-z0-9]/.test(tok)))) continue
+    if (/\d|\//.test(tok) || NOT_NAME.has(bare.toLowerCase())) break
+    const isWord = /^[A-ZÀ-ÞÑ][A-Za-zÀ-ÿÑñ'.-]*$/.test(bare) || (start !== -1 && NAME_PARTICLES.test(bare))
+    if (!isWord) break
+    if (start === -1) start = m.index
+    end = m.index + bare.length
+    if (++words >= 6) break
+  }
+  if (start === -1) return null
+  // At least one real word, not just initials.
+  return /[A-Za-zÀ-ÿ]{2,}/.test(s.slice(start, end)) ? { start, end } : null
+}
+
+/** Values after name labels: the rest of the label's line, or the next line if that is empty. */
+function labeledNames(raw: string): Candidate[] {
+  const out: Candidate[] = []
+  const lines = splitLines(raw)
+  lines.forEach((line, i) => {
+    const labels = [...line.text.matchAll(NAME_LABEL)]
+    labels.forEach((label, k) => {
+      const restStart = label.index + label[0].length
+      const restEnd = k + 1 < labels.length ? labels[k + 1].index : line.text.length
+      const same = nameValue(line.text.slice(restStart, restEnd))
+      if (same) {
+        out.push({ start: line.start + restStart + same.start, end: line.start + restStart + same.end, type: 'name' })
+        return
+      }
+      // Label with nothing usable after it (or only another column's label): value on the next line.
+      if (line.text.slice(restStart).match(/[A-Za-z]{2,}/) && k + 1 < labels.length) return
+      const next = lines[i + 1]
+      const below = next && nameValue(next.text)
+      if (below) out.push({ start: next.start + below.start, end: next.start + below.end, type: 'name' })
+    })
+  })
+  return out
+}
+
+/**
+ * Passport machine-readable zone: "P<PHLDELA<CRUZ<<JUAN<MIGUEL<<<<…" (name) and the line under
+ * it holding the passport number and birth date. OCR may read "<" as "«".
+ */
+function mrz(raw: string): Candidate[] {
+  const out: Candidate[] = []
+  for (const m of raw.matchAll(/[A-Z0-9<«]*[<«]{2,}[A-Z0-9<«]*/g)) {
+    if (m[0].length < 20) continue
+    out.push({ start: m.index, end: m.index + m[0].length, type: /^P[<«A-Z]/.test(m[0]) && !/\d{6}/.test(m[0]) ? 'name' : 'id_number' })
+  }
+  return out
+}
+
 // Most specific first.
 const DETECTORS: Detector[] = [
+  { name: 'mrz', on: 'raw', find: (_text, raw) => mrz(raw) },
   pattern('email', 'raw', String.raw`[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}`, 'email'),
   {
     name: 'card',
@@ -216,7 +301,16 @@ const DETECTORS: Detector[] = [
   pattern('dob', 'norm', `${B}(?:${DATE})${E}`, 'date', 'gi', (m, raw) =>
     near(raw, m.index, m.index + m[0].length, BIRTH_WORDS) ? 'date' : null,
   ),
+  // "REGISTRATION NO. ▶ 0074555", "Passport No.: P1234567A": a number right after an ID label.
+  pattern(
+    'labeled_id',
+    'raw',
+    String.raw`(?<=\b(?:registration|reg\.?|licen[cs]e|passport|card|member(?:ship)?|policy|id)[ \t]*(?:no\.?|number|#)[ \t:>»▶►|]*(?:[^\s\d]{1,2}[ \t]+)?)[A-Z]{0,3}\d[0-9A-Z-]{4,}${E}`,
+    'id_number',
+    'gi',
+  ),
   { name: 'address', on: 'raw', find: (_text, raw) => addresses(raw) },
+  { name: 'name', on: 'raw', find: (_text, raw) => labeledNames(raw) },
 ]
 
 export function detectRegex(fullText: string): Span[] {
