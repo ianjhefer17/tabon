@@ -50,11 +50,6 @@
   .step .d { font-size: clamp(16px, 1.6vw, 26px); color: var(--muted); margin-top: 1.2vh; line-height: 1.35; }
   .arrow { align-self: center; color: var(--emerald); font-size: clamp(28px, 3vw, 52px); font-weight: 800; }
 
-  .metrics { display: grid; grid-template-columns: repeat(3, 1fr); gap: 2vw; margin-top: 5vh; }
-  .metric { background: var(--panel); border: 2px solid var(--line); border-radius: 18px; padding: 4vh 2vw; }
-  .metric .v { font-size: clamp(36px, 5.5vw, 92px); font-weight: 800; color: var(--amber); font-variant-numeric: tabular-nums; }
-  .metric .l { font-size: clamp(16px, 1.8vw, 28px); color: var(--muted); margin-top: 1vh; }
-  .note { margin-top: 3vh; font-size: clamp(14px, 1.5vw, 22px); color: var(--muted); }
 
   .demo { align-items: center; text-align: center; }
   .wifi { font-size: clamp(80px, 14vw, 220px); line-height: 1; color: var(--amber); margin-bottom: 3vh; }
@@ -75,7 +70,7 @@
 
   @media (max-width: 700px) {
     .slide { padding: 6vh 16px; }
-    .metrics, .two { grid-template-columns: 1fr; }
+    .two { grid-template-columns: 1fr; }
     .arrow { transform: rotate(90deg); width: 100%; text-align: center; }
     footer { left: 16px; right: 16px; }
   }
@@ -141,19 +136,7 @@
   </div>
 </section>
 
-<!-- 6. Measured results -->
-<section class="slide">
-  <div class="kicker">Measured results</div>
-  <h2>Measured on this laptop, not estimated.</h2>
-  <div class="metrics">
-    <div class="metric"><div class="v">[OCR ms]</div><div class="l">OCR time per page</div></div>
-    <div class="metric"><div class="v">[AI ms]</div><div class="l">Local AI detection time</div></div>
-    <div class="metric"><div class="v">[detections]</div><div class="l">PII items found on the sample</div></div>
-  </div>
-  <p class="note">Source: in-app benchmark (<code>?debug=1</code> → Run benchmark) on fictional sample documents.</p>
-</section>
-
-<!-- 7. Who + next -->
+<!-- 6. Who + next -->
 <section class="slide">
   <div class="kicker">Who it's for</div>
   <h2>Share what's needed. <span class="em">Hide the rest.</span></h2>

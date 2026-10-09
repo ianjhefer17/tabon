@@ -41,7 +41,7 @@ Short answers first, detail after. Never say "safe" or "guaranteed". Say "Review
 **Standard: Qwen2.5-3B (about 1.7 GB). Lite: Qwen2.5-1.5B (about 0.9 GB).** Both are 4-bit quantized (MLC q4f16_1), downloaded once and stored in the browser.
 
 - The AI needs WebGPU (Chrome 121+) and a GPU with enough memory. We've demoed it on a laptop (M1).
-- Phones: rule-based detection and OCR run in any modern browser. The LLM depends on the phone having WebGPU and enough memory; we have not benchmarked phones yet, so we won't claim it. Lite is the model we'd target there.
+- Phones: rule-based detection and OCR run in any modern browser. The LLM depends on the phone having WebGPU and enough memory; we have not tested phones yet, so we won't claim it. Lite is the model we'd target there.
 - Without WebGPU, Tabon still works with rules only and says so.
 
 ### Business model?
@@ -67,5 +67,5 @@ Options we'd explore (not validated yet):
 
 - **Why "Tabon"?** Filipino for "to cover up". You cover what's not theirs to see.
 - **PDF?** Yes. Pages render locally with self-hosted pdf.js; export is image-only, so no hidden text layer survives.
-- **Accuracy numbers?** Only what we measured with the in-app benchmark (`?debug=1`). We don't quote numbers we didn't measure.
+- **Accuracy numbers?** We don't quote numbers we haven't measured. Show it live on the sample documents instead.
 - **Sample documents?** All fictional and watermarked SAMPLE.
