@@ -10,6 +10,8 @@ export interface LlmState {
   /** Model id actually loaded (may be the q4f32 build on GPUs without f16). */
   modelId: string | null
   error: string | null
+  /** The load failed for lack of network: the model was never fully saved on this device. */
+  needsNetwork: boolean
   setModelKey: (key: ModelKey) => void
 }
 
@@ -20,6 +22,9 @@ export function useLlm(): LlmState {
   const [modelKey, setKey] = useState<ModelKey>(getSavedModel)
   const [modelId, setModelId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [needsNetwork, setNeedsNetwork] = useState(false)
+  // Bumped to retry a load that failed offline once the connection is back.
+  const [attempt, setAttempt] = useState(0)
 
   useEffect(() => {
     let cancelled = false
@@ -33,6 +38,8 @@ export function useLlm(): LlmState {
       }
       setStatus('loading')
       setProgress(null)
+      setError(null)
+      setNeedsNetwork(false)
       try {
         const id = await loadLlm(modelKey, gpu.f16, (p) => !cancelled && setProgress(p))
         if (cancelled) return
@@ -41,14 +48,23 @@ export function useLlm(): LlmState {
       } catch (err) {
         if (cancelled) return
         console.error(err)
-        setError(err instanceof Error ? err.message : String(err))
+        const message = err instanceof Error ? err.message : String(err)
+        setError(message)
+        setNeedsNetwork(!navigator.onLine || /failed to fetch|network/i.test(message))
         setStatus('error')
       }
     })()
     return () => {
       cancelled = true
     }
-  }, [modelKey])
+  }, [modelKey, attempt])
+
+  useEffect(() => {
+    if (!(status === 'error' && needsNetwork)) return
+    const retry = () => setAttempt((n) => n + 1)
+    window.addEventListener('online', retry)
+    return () => window.removeEventListener('online', retry)
+  }, [status, needsNetwork])
 
   const setModelKey = useCallback((key: ModelKey) => {
     saveModel(key)
@@ -58,5 +74,5 @@ export function useLlm(): LlmState {
     setProgress(null)
   }, [])
 
-  return { status, progress, modelKey, modelId, error, setModelKey }
+  return { status, progress, modelKey, modelId, error, needsNetwork, setModelKey }
 }

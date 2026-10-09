@@ -9,6 +9,14 @@ export function LlmBanner({ llm }: { llm: LlmState }) {
       </div>
     )
   }
+  if (llm.status === 'error' && llm.needsNetwork) {
+    return (
+      <div role="status" className="border-b border-amber-500/30 bg-amber-500/10 px-6 py-2 text-sm text-amber-200">
+        The AI model isn't saved on this device yet. Connect to the internet once to download it (it resumes
+        automatically). Rule-based detection works meanwhile.
+      </div>
+    )
+  }
   if (llm.status === 'error') {
     return (
       <div role="status" className="border-b border-red-500/30 bg-red-500/10 px-6 py-2 text-sm text-red-200">
