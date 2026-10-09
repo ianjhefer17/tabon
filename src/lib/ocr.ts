@@ -53,10 +53,17 @@ function getWorker(): Promise<Worker> {
       gzip: true,
       workerBlobURL: false,
       logger: (m) => reportProgress(m.status, m.progress),
-    }).catch((err) => {
-      workerPromise = null
-      throw err
     })
+      .then(async (worker) => {
+        // Sauvola adaptive thresholding: reads dark text on coloured bands that the default (Otsu) drops.
+        // kfactor 0.2 found every key PII string in all 4 samples; the 0.34 default misread a date.
+        await worker.setParameters({ thresholding_method: '2', thresholding_kfactor: '0.2' })
+        return worker
+      })
+      .catch((err) => {
+        workerPromise = null
+        throw err
+      })
   }
   return workerPromise
 }
