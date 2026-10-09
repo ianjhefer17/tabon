@@ -16,3 +16,6 @@ __pycache__/
 public/tesseract/worker.min.js
 public/tesseract/core/
 public/pdfjs/
+
+# AI model files downloaded by scripts/download-models.mjs (npm run models)
+models/

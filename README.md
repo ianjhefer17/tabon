@@ -18,7 +18,7 @@ npm test
 - tesseract.js + tesseract.js-core (in-browser OCR, WebAssembly), self-hosted under `public/tesseract/`
 - Tesseract `eng.traineddata` from tesseract-ocr/tessdata_fast (Apache-2.0), gzipped at `public/tesseract/lang/eng.traineddata.gz`
 - @mlc-ai/web-llm (in-browser LLM on WebGPU, runs in a Web Worker)
-- Qwen2.5-3B-Instruct (default, Qwen Research License) and Qwen2.5-1.5B-Instruct (Lite, Apache-2.0) by the Qwen team, Alibaba Cloud, in MLC q4f16_1 builds (q4f32_1 on GPUs without f16). Weights download once from huggingface.co/mlc-ai and the WebGPU kernels from raw.githubusercontent.com/mlc-ai/binary-mlc-llm-libs, then stay in the browser's IndexedDB.
+- Qwen2.5-3B-Instruct (default, Qwen Research License) and Qwen2.5-1.5B-Instruct (Lite, Apache-2.0) by the Qwen team, Alibaba Cloud, in MLC q4f16_1 builds (q4f32_1 on GPUs without f16). Weights download once from huggingface.co/mlc-ai and the WebGPU kernels from raw.githubusercontent.com/mlc-ai/binary-mlc-llm-libs (or from this machine after `npm run models`), then stay in the browser's IndexedDB.
 - pdfjs-dist (PDF rendering), with its worker, CMaps, standard fonts (Foxit, Liberation Sans) and image-decoder wasm (OpenJPEG, JBIG2, QCMS) self-hosted under `public/pdfjs/`
 - vite-plugin-pwa (Workbox service worker that precaches the app, OCR files and samples; web app manifest)
 - rsvg-convert (librsvg; rendered the shield icon `public/favicon.svg` to `icon-192.png` / `icon-512.png`)
@@ -42,6 +42,17 @@ rsvg-convert -w 512 -h 512 public/favicon.svg -o public/icon-512.png
 ## AI model
 
 On first visit the app downloads the AI model in the background (Standard 1.7 GB, Lite 0.9 GB; switch in the side panel). After that it loads from the browser's storage with no network. Without WebGPU the app falls back to rule-based detection only.
+
+To keep the models on this machine instead of fetching them from Hugging Face, download them once into `models/` (git-ignored, ~2.6 GB for both):
+
+```
+npm run models            # both; or: npm run models -- lite
+npm run build && npm run preview
+```
+
+`vite` and `vite preview` then serve them at `/models/`, and the build points the app there for each downloaded model, so a new browser profile fills its cache from local disk in about a minute. The browser cache is keyed by URL: a model already cached from Hugging Face is fetched again once from `/models/`.
+
+The AI looks for names, addresses and ID/account numbers. Phones, emails and dates are left to the rules, which find them reliably and instantly.
 
 `npm install` also runs `scripts/patch-webllm.mjs`, a one-line patch to web-llm: its IndexedDB cache checked whether weight files exist by reading every one (all 1.7 GB), twice per start (once in `hasModelInCache`, once before loading). The patch checks keys only (`getKey`). Measured: cached model ready in ~35 s instead of ~145 s.
 

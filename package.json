@@ -9,7 +9,8 @@
     "lint": "oxlint",
     "preview": "vite preview",
     "postinstall": "node scripts/copy-assets.mjs && node scripts/patch-webllm.mjs",
-    "test": "vitest run"
+    "test": "vitest run",
+    "models": "node scripts/download-models.mjs"
   },
   "dependencies": {
     "@mlc-ai/web-llm": "^0.2.85",

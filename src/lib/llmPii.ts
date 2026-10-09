@@ -99,8 +99,20 @@ async function loadNow(key: ModelKey, f16: boolean, onProgress?: (p: LoadProgres
 // Store weights in IndexedDB. The default Cache API backend streams each download straight into
 // the cache, which failed in testing ("Cache.add() encountered a network error") for the large
 // Hugging Face shards even though the same files fetched fine.
+// Models downloaded with `npm run models` load from this machine (/models/) instead of Hugging
+// Face. The cache is keyed by URL, so a model cached from one source is not reused from the other.
 function makeAppConfig(webllm: typeof import('@mlc-ai/web-llm')): AppConfig {
-  return { ...webllm.prebuiltAppConfig, cacheBackend: 'indexeddb' }
+  const base = new URL(`${import.meta.env.BASE_URL}models/`, window.location.href)
+  const model_list = webllm.prebuiltAppConfig.model_list.map((record) => {
+    const local = __LOCAL_MODELS__.find((m) => m.id === record.model_id)
+    if (!local) return record
+    return {
+      ...record,
+      model: new URL(`${local.id}/resolve/main/`, base).href,
+      model_lib: new URL(`libs/${local.lib}`, base).href,
+    }
+  })
+  return { ...webllm.prebuiltAppConfig, model_list, cacheBackend: 'indexeddb' }
 }
 
 /** True when every weight shard of the model is stored on this device. */
