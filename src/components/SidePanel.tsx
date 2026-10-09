@@ -1,7 +1,10 @@
+import type { LlmState } from '../hooks/useLlm'
+import { MODELS, type ModelKey } from '../lib/llmPii'
 import { SOURCE_LABEL, TYPE_COLOR, TYPE_LABEL, maskText } from '../lib/piiStyle'
 import type { Box } from '../types'
 
 export type PanelPhase = 'empty' | 'reading' | 'done'
+export type AiPhase = 'idle' | 'waiting' | 'scanning' | 'done' | 'off' | 'failed'
 
 interface SidePanelProps {
   phase: PanelPhase
@@ -12,6 +15,9 @@ interface SidePanelProps {
   showOcr: boolean
   onShowOcrChange: (show: boolean) => void
   fullText: string
+  aiPhase: AiPhase
+  llm: LlmState
+  onModelChange: (key: ModelKey) => void
 }
 
 interface Detection {
@@ -31,7 +37,7 @@ function detections(boxes: Box[]): Detection[] {
   return [...byGroup.values()]
 }
 
-export function SidePanel({ phase, boxes, onToggle, onSetAll, showOcr, onShowOcrChange, fullText }: SidePanelProps) {
+export function SidePanel({ phase, boxes, onToggle, onSetAll, showOcr, onShowOcrChange, fullText, aiPhase, llm, onModelChange }: SidePanelProps) {
   const items = detections(boxes)
   const selected = items.filter((d) => d.enabled).length
 
@@ -82,7 +88,37 @@ export function SidePanel({ phase, boxes, onToggle, onSetAll, showOcr, onShowOcr
         </>
       )}
 
+      {aiPhase === 'scanning' && (
+        <p className="mt-3 flex items-center gap-2 text-xs text-violet-300">
+          <span className="h-2 w-2 animate-pulse rounded-full bg-violet-400" />
+          AI scanning for names, addresses and more…
+        </p>
+      )}
+      {aiPhase === 'waiting' && llm.status === 'loading' && (
+        <p className="mt-3 text-xs text-gray-500">The AI scan starts when the model has loaded.</p>
+      )}
+      {aiPhase === 'failed' && <p className="mt-3 text-xs text-red-300">The AI scan failed; showing rule-based detections only.</p>}
+
       <p className="mt-6 text-xs text-amber-400">Review before sharing.</p>
+
+      <label className="mt-6 block text-xs text-gray-400">
+        AI model
+        <select
+          value={llm.modelKey}
+          disabled={llm.status === 'unsupported'}
+          onChange={(e) => onModelChange(e.target.value as ModelKey)}
+          className="mt-1 block w-full rounded-md border border-gray-700 bg-gray-900 px-2 py-1 text-xs text-gray-200 disabled:opacity-50"
+        >
+          {(Object.keys(MODELS) as ModelKey[]).map((k) => (
+            <option key={k} value={k}>
+              {MODELS[k].label}
+            </option>
+          ))}
+        </select>
+        <span className="mt-1 block text-[11px] text-gray-500">
+          {llm.status === 'unsupported' ? 'Needs WebGPU.' : 'Runs on your device. Lite is faster and smaller, Standard is more accurate.'}
+        </span>
+      </label>
 
       {/* TEMP debug: remove before submission. */}
       <label className="mt-6 flex items-center gap-2 text-xs text-gray-400">

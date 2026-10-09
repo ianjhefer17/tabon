@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { BOX_PADDING, findSubstringSpans, mergeBoxes, spansToBoxes } from './match'
+import { BOX_PADDING, dropCoveredSpans, findFuzzySpan, findSubstringSpans, mergeBoxes, spansToBoxes } from './match'
 import type { Box, Span, Word } from '../types'
 
 // fullText for these words: "Name: JUAN DELA\nCRUZ 0917"
@@ -110,7 +110,45 @@ describe('mergeBoxes', () => {
     expect(merged.map((b) => b.id)).toEqual(['a', 'b'])
   })
 
+  it('keeps a large box that merely contains a small one', () => {
+    // e.g. an LLM box over "NAME 3012-4455-67" containing the regex account box
+    const merged = mergeBoxes([box('re', 'regex', 300, 400), box('llm', 'llm', 0, 400)])
+    expect(merged.map((b) => b.id)).toEqual(['re', 'llm'])
+  })
+
   it('keeps the first of two same-source duplicates', () => {
     expect(mergeBoxes([box('a', 'llm', 0, 100), box('b', 'llm', 0, 100)]).map((b) => b.id)).toEqual(['a'])
+  })
+})
+
+describe('findFuzzySpan', () => {
+  const text = 'NAME\nJUAN MIGUEL DELA CRUZ SANTOS\nDATE OF BIRTH'
+
+  it('recovers a slightly mis-copied value, spanning the real text', () => {
+    const s = findFuzzySpan(text, 'JORAN MIGUEL DELA CRUZ SANTOS', 'name', 'llm')
+    expect(s?.text).toBe('JUAN MIGUEL DELA CRUZ SANTOS')
+    expect(text.slice(s!.start, s!.end)).toBe(s!.text)
+  })
+
+  it('rejects values that are not on the page', () => {
+    expect(findFuzzySpan(text, 'MARIA CLARA REYES BAUTISTA', 'name', 'llm')).toBeNull()
+    expect(findFuzzySpan(text, 'JUAN SANTOS', 'name', 'llm')).toBeNull()
+  })
+
+  it('ignores very short needles', () => {
+    expect(findFuzzySpan(text, 'JAUN', 'name', 'llm')).toBeNull()
+  })
+})
+
+describe('dropCoveredSpans', () => {
+  const t = '34-1234567-8 12-345678901-2 HT-2019-0457'
+  const sp = (start: number, end: number): Span => ({ start, end, type: 'id_number', source: 'llm', text: t.slice(start, end) })
+
+  it('drops a span fully covered by others, ignoring spaces between them', () => {
+    expect(dropCoveredSpans([sp(0, 27)], [sp(0, 12), sp(13, 27)])).toEqual([])
+  })
+
+  it('keeps a span with uncovered characters', () => {
+    expect(dropCoveredSpans([sp(28, 40)], [sp(0, 12)])).toHaveLength(1)
   })
 })

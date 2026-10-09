@@ -17,7 +17,8 @@ npm test
 - Vite, React, TypeScript, Tailwind CSS
 - tesseract.js + tesseract.js-core (in-browser OCR, WebAssembly), self-hosted under `public/tesseract/`
 - Tesseract `eng.traineddata` from tesseract-ocr/tessdata_fast (Apache-2.0), gzipped at `public/tesseract/lang/eng.traineddata.gz`
-- @mlc-ai/web-llm (in-browser LLM on WebGPU), models Qwen2.5-3B-Instruct-q4f16_1-MLC (fallback Qwen2.5-1.5B-Instruct-q4f16_1-MLC)
+- @mlc-ai/web-llm (in-browser LLM on WebGPU, runs in a Web Worker)
+- Qwen2.5-3B-Instruct (default, Qwen Research License) and Qwen2.5-1.5B-Instruct (Lite, Apache-2.0) by the Qwen team, Alibaba Cloud, in MLC q4f16_1 builds (q4f32_1 on GPUs without f16). Weights download once from huggingface.co/mlc-ai and the WebGPU kernels from raw.githubusercontent.com/mlc-ai/binary-mlc-llm-libs, then stay in the browser's IndexedDB.
 - pdfjs-dist (PDF rendering), with its worker, CMaps, standard fonts (Foxit, Liberation Sans) and image-decoder wasm (OpenJPEG, JBIG2, QCMS) self-hosted under `public/pdfjs/`
 - vite-plugin-pwa (offline caching)
 - oxlint (linting), vitest (unit tests)
@@ -27,6 +28,16 @@ npm test
 ## Offline assets
 
 `npm install` runs `scripts/copy-assets.mjs` (postinstall), which copies the Tesseract worker and core files into `public/tesseract/` and the pdf.js worker and data into `public/pdfjs/`. The app never loads OCR or PDF code or data from a CDN, and the service worker caches all of it so the app works offline after the first visit.
+
+## AI model
+
+On first visit the app downloads the AI model in the background (Standard 1.7 GB, Lite 0.9 GB; switch in the side panel). After that it loads from the browser's storage with no network. Without WebGPU the app falls back to rule-based detection only.
+
+For a demo machine with little free disk, a Chrome profile on an external drive keeps the model there:
+
+```
+open -na "Google Chrome" --args --user-data-dir=/Volumes/T7/tabon-chrome-profile
+```
 
 ## Sample documents
 

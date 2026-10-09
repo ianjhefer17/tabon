@@ -5,6 +5,8 @@ import { VitePWA } from 'vite-plugin-pwa'
 
 // https://vite.dev/config/
 export default defineConfig({
+  // The WebLLM worker (src/workers/llm.worker.ts) is an ES module.
+  worker: { format: 'es' },
   plugins: [
     react(),
     tailwindcss(),
