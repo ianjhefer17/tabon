@@ -2,7 +2,7 @@ interface SampleRowProps {
   onFile: (file: File) => void
 }
 
-const SAMPLES = [
+export const SAMPLES = [
   { file: 'id_card.png', label: 'ID card' },
   { file: 'bank_statement.png', label: 'Bank statement' },
   { file: 'payslip.png', label: 'Payslip' },
@@ -12,7 +12,7 @@ const SAMPLES = [
 const BASE = `${import.meta.env.BASE_URL}samples/`
 
 // Samples are app assets (same origin, precached by the service worker).
-async function loadSample(name: string): Promise<File> {
+export async function loadSample(name: string): Promise<File> {
   const res = await fetch(BASE + name)
   if (!res.ok) throw new Error(`Could not load sample ${name}`)
   const blob = await res.blob()

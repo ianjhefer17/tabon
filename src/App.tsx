@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { DebugPanel, isDebug } from './components/DebugPanel'
 import { DocumentView } from './components/DocumentView'
 import { DropZone } from './components/DropZone'
 import { Header } from './components/Header'
@@ -24,6 +25,8 @@ interface LoadedDoc {
   page?: number
   numPages?: number
 }
+
+const DEBUG = isDebug()
 
 const READY = 'Ready. Drop a document to begin.'
 
@@ -302,6 +305,7 @@ function App() {
             <DropZone onFile={handleFile} />
           )}
           <SampleRow onFile={handleFile} />
+          {DEBUG && <DebugPanel llm={llm} />}
         </main>
         <SidePanel
           phase={phase}
