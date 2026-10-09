@@ -1,7 +1,8 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { DebugPanel, isDebug } from './components/DebugPanel'
 import { DocumentView } from './components/DocumentView'
 import { DropZone } from './components/DropZone'
+import { ExportModal } from './components/ExportModal'
 import { Header } from './components/Header'
 import { LlmBanner } from './components/LlmBanner'
 import { SampleRow } from './components/SampleRow'
@@ -13,8 +14,9 @@ import { dropCoveredSpans, mergeBoxes, spansToBoxes } from './lib/match'
 import { runOcr, type OcrSource } from './lib/ocr'
 import { canvasToBlob, openPdf, type PdfDoc } from './lib/pdf'
 import { useUpdateReady } from './lib/pwa'
+import { copyPng, downloadBlob, redactImage, redactedFileName, toPngBlob, type RedactStyle } from './lib/redact'
 import { detectRegex } from './lib/regexPii'
-import type { Box, Word } from './types'
+import type { BBox, Box, Word } from './types'
 
 interface LoadedDoc {
   url: string
@@ -29,6 +31,12 @@ interface LoadedDoc {
 const DEBUG = isDebug()
 
 const READY = 'Ready. Drop a document to begin.'
+
+interface Preview {
+  url: string
+  blob: Blob
+  fileName: string
+}
 
 interface Timings {
   ocr?: number
@@ -57,7 +65,14 @@ function App() {
   const [status, setStatus] = useState(READY)
   const [aiPhase, setAiPhase] = useState<AiPhase>('idle')
   const [timings, setTimings] = useState<Timings>({})
+  const [redactStyle, setRedactStyle] = useState<RedactStyle>('black')
+  const [drawing, setDrawing] = useState(false)
+  const [exporting, setExporting] = useState(false)
+  const [exportStatus, setExportStatus] = useState('')
+  const [copyStatus, setCopyStatus] = useState('')
+  const [preview, setPreview] = useState<Preview | null>(null)
   const runId = useRef(0)
+  const manualCount = useRef(0)
   /** Bumped whenever an AI scan result must be ignored (new document, new model). */
   const aiRun = useRef(0)
   const pdfRef = useRef<PdfDoc | null>(null)
@@ -118,6 +133,17 @@ function App() {
     if (doc) URL.revokeObjectURL(doc.url)
   }, [doc])
 
+  // Release the preview's object URL when it is replaced or closed.
+  useEffect(() => () => {
+    if (preview) URL.revokeObjectURL(preview.url)
+  }, [preview])
+
+  const resetExport = () => {
+    setDrawing(false)
+    setExportStatus('')
+    setPreview(null)
+  }
+
   const closePdf = () => {
     pdfRef.current?.destroy().catch(() => undefined)
     pdfRef.current = null
@@ -132,6 +158,7 @@ function App() {
   // Shows the page image and runs OCR on it. `source` is the full-resolution pixels.
   const showAndOcr = async (id: number, next: LoadedDoc, source: OcrSource) => {
     stopAi()
+    resetExport()
     setDoc(next)
     setWords([])
     setFullText('')
@@ -216,6 +243,7 @@ function App() {
     runId.current++
     stopAi()
     closePdf()
+    resetExport()
     setDoc(null)
     setWords([])
     setFullText('')
@@ -231,6 +259,49 @@ function App() {
       const next = !bs.filter((b) => b.group === group).every((b) => b.enabled)
       return bs.map((b) => (b.group === group ? { ...b, enabled: next } : b))
     })
+  const addManualBox = (bbox: BBox) => {
+    const group = `manual:${++manualCount.current}`
+    setBoxes((bs) => [...bs, { id: group, group, type: 'other', source: 'manual', bbox, enabled: true, text: `Drawn box ${manualCount.current}` }])
+  }
+
+  // Full-resolution redacted PNG of the current page, from the original pixels (not the preview).
+  const buildPng = async (): Promise<Blob> => {
+    if (!doc) throw new Error('No document loaded')
+    const img = await loadImage(doc.url)
+    return toPngBlob(redactImage(img, boxes, redactStyle))
+  }
+
+  const exportPng = async () => {
+    if (!doc) return
+    setExporting(true)
+    setExportStatus('')
+    try {
+      const blob = await buildPng()
+      const fileName = redactedFileName(doc.name, doc.page, doc.numPages)
+      downloadBlob(blob, fileName)
+      setCopyStatus('')
+      setPreview({ url: URL.createObjectURL(blob), blob, fileName })
+    } catch (err) {
+      console.error(err)
+      setExportStatus(`Could not export: ${err instanceof Error ? err.message : String(err)}`)
+    } finally {
+      setExporting(false)
+    }
+  }
+
+  const copy = async (blob: Promise<Blob>, report: (msg: string) => void) => {
+    report('Copying…')
+    try {
+      await copyPng(blob)
+      report('Copied redacted image to clipboard.')
+    } catch (err) {
+      console.error(err)
+      report(`Could not copy: ${err instanceof Error ? err.message : String(err)}`)
+    }
+  }
+
+  const closePreview = useCallback(() => setPreview(null), [])
+
   const setAll = (enabled: boolean) => setBoxes((bs) => bs.map((b) => ({ ...b, enabled })))
   const phase: PanelPhase = !doc ? 'empty' : ocrDone ? 'done' : 'reading'
 
@@ -286,6 +357,18 @@ function App() {
                       </select>
                     </label>
                   )}
+                  <button
+                    type="button"
+                    onClick={() => setDrawing((d) => !d)}
+                    disabled={!ocrDone}
+                    aria-pressed={drawing}
+                    title="Drag on the image to cover anything the scan missed"
+                    className={`rounded-md border px-3 py-1 text-sm disabled:opacity-50 ${
+                      drawing ? 'border-emerald-400 bg-emerald-400/10 text-emerald-200' : 'border-gray-700 hover:border-gray-500'
+                    }`}
+                  >
+                    {drawing ? 'Done drawing' : 'Draw box'}
+                  </button>
                   <button type="button" onClick={clear} className="rounded-md border border-gray-700 px-3 py-1 text-sm hover:border-gray-500">
                     New document
                   </button>
@@ -299,7 +382,10 @@ function App() {
                 boxes={boxes}
                 showWords={showOcr}
                 onToggle={toggleGroup}
+                drawing={drawing}
+                onDraw={addManualBox}
               />
+              {drawing && <p className="mt-2 text-center text-xs text-gray-400">Drag on the image to add a redaction box.</p>}
             </div>
           ) : (
             <DropZone onFile={handleFile} />
@@ -318,9 +404,25 @@ function App() {
           aiPhase={aiPhase}
           llm={llm}
           onModelChange={changeModel}
+          redactStyle={redactStyle}
+          onRedactStyleChange={setRedactStyle}
+          onExport={exportPng}
+          onCopy={() => copy(buildPng(), setExportStatus)}
+          exporting={exporting}
+          exportStatus={exportStatus}
         />
       </div>
       <StatusBar message={message} detail={detail} />
+      {preview && (
+        <ExportModal
+          url={preview.url}
+          fileName={preview.fileName}
+          onDownload={() => downloadBlob(preview.blob, preview.fileName)}
+          onCopy={() => copy(Promise.resolve(preview.blob), setCopyStatus)}
+          copyStatus={copyStatus}
+          onClose={closePreview}
+        />
+      )}
     </div>
   )
 }

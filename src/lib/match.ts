@@ -149,12 +149,14 @@ export function overlapRatio(a: BBox, b: BBox): number {
 /**
  * Drops boxes that overlap an already-kept box by more than 60% (intersection over union).
  * When a regex box and an LLM box collide, the regex one is kept; otherwise the first wins.
+ * Boxes the user drew are always kept.
  */
 export function mergeBoxes(boxes: Box[]): Box[] {
-  const ordered = boxes.map((box, i) => ({ box, i })).sort((a, b) => Number(b.box.source === 'regex') - Number(a.box.source === 'regex'))
+  const rank = (b: Box) => (b.source === 'manual' ? 2 : b.source === 'regex' ? 1 : 0)
+  const ordered = boxes.map((box, i) => ({ box, i })).sort((a, b) => rank(b.box) - rank(a.box))
   const kept: { box: Box; i: number }[] = []
   for (const o of ordered) {
-    if (!kept.some((k) => overlapRatio(k.box.bbox, o.box.bbox) > 0.6)) kept.push(o)
+    if (o.box.source === 'manual' || !kept.some((k) => overlapRatio(k.box.bbox, o.box.bbox) > 0.6)) kept.push(o)
   }
   // Back to input (text) order.
   return kept.sort((a, b) => a.i - b.i).map((k) => k.box)

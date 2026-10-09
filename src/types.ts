@@ -24,7 +24,8 @@ export type PiiType =
   | 'date'
   | 'other'
 
-export type PiiSource = 'regex' | 'llm'
+/** 'manual' = a box the user drew. */
+export type PiiSource = 'regex' | 'llm' | 'manual'
 
 export interface Span {
   start: number

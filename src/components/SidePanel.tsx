@@ -1,5 +1,6 @@
 import type { LlmState } from '../hooks/useLlm'
 import { MODELS, type ModelKey } from '../lib/llmPii'
+import type { RedactStyle } from '../lib/redact'
 import { SOURCE_LABEL, TYPE_COLOR, TYPE_LABEL, maskText } from '../lib/piiStyle'
 import type { Box } from '../types'
 
@@ -18,7 +19,19 @@ interface SidePanelProps {
   aiPhase: AiPhase
   llm: LlmState
   onModelChange: (key: ModelKey) => void
+  redactStyle: RedactStyle
+  onRedactStyleChange: (style: RedactStyle) => void
+  onExport: () => void
+  onCopy: () => void
+  exporting: boolean
+  /** Result of the last copy/export, e.g. "Copied" or an error. */
+  exportStatus: string
 }
+
+const STYLES: { value: RedactStyle; label: string }[] = [
+  { value: 'black', label: 'Black bar' },
+  { value: 'pixelate', label: 'Pixelate' },
+]
 
 interface Detection {
   group: string
@@ -37,7 +50,24 @@ function detections(boxes: Box[]): Detection[] {
   return [...byGroup.values()]
 }
 
-export function SidePanel({ phase, boxes, onToggle, onSetAll, showOcr, onShowOcrChange, fullText, aiPhase, llm, onModelChange }: SidePanelProps) {
+export function SidePanel({
+  phase,
+  boxes,
+  onToggle,
+  onSetAll,
+  showOcr,
+  onShowOcrChange,
+  fullText,
+  aiPhase,
+  llm,
+  onModelChange,
+  redactStyle,
+  onRedactStyleChange,
+  onExport,
+  onCopy,
+  exporting,
+  exportStatus,
+}: SidePanelProps) {
   const items = detections(boxes)
   const selected = items.filter((d) => d.enabled).length
 
@@ -78,7 +108,7 @@ export function SidePanel({ phase, boxes, onToggle, onSetAll, showOcr, onShowOcr
                     {TYPE_LABEL[box.type]}
                   </span>
                   <span className={`min-w-0 flex-1 truncate font-mono text-xs ${enabled ? 'text-gray-200' : 'text-gray-500 line-through'}`}>
-                    {maskText(box.text)}
+                    {box.source === 'manual' ? box.text : maskText(box.text)}
                   </span>
                   <span className="shrink-0 text-[11px] text-gray-500">{SOURCE_LABEL[box.source]}</span>
                 </label>
@@ -98,6 +128,44 @@ export function SidePanel({ phase, boxes, onToggle, onSetAll, showOcr, onShowOcr
         <p className="mt-3 text-xs text-gray-500">The AI scan starts when the model has loaded.</p>
       )}
       {aiPhase === 'failed' && <p className="mt-3 text-xs text-red-300">The AI scan failed; showing rule-based detections only.</p>}
+
+      {phase === 'done' && (
+        <div className="mt-6 border-t border-gray-800 pt-4">
+          <div role="radiogroup" aria-label="Redaction style" className="flex rounded-md border border-gray-700 p-0.5 text-xs">
+            {STYLES.map((s) => (
+              <button
+                key={s.value}
+                type="button"
+                role="radio"
+                aria-checked={redactStyle === s.value}
+                onClick={() => onRedactStyleChange(s.value)}
+                className={`flex-1 rounded px-2 py-1 ${redactStyle === s.value ? 'bg-gray-700 text-gray-100' : 'text-gray-400 hover:text-gray-200'}`}
+              >
+                {s.label}
+              </button>
+            ))}
+          </div>
+          <button
+            type="button"
+            onClick={onExport}
+            disabled={exporting}
+            className="mt-3 w-full rounded-md bg-emerald-500 px-4 py-3 text-base font-semibold text-gray-950 hover:bg-emerald-400 disabled:opacity-60"
+          >
+            {exporting ? 'Redacting…' : 'Redact & Download'}
+          </button>
+          <button
+            type="button"
+            onClick={onCopy}
+            disabled={exporting}
+            className="mt-2 w-full rounded-md border border-gray-700 px-4 py-2 text-sm hover:border-gray-500 disabled:opacity-60"
+          >
+            Copy to clipboard
+          </button>
+          <p className="mt-2 text-[11px] text-gray-500">Metadata (EXIF/GPS) removed</p>
+          {aiPhase === 'scanning' && <p className="mt-1 text-[11px] text-violet-300">The AI scan is still running and may add more boxes.</p>}
+          {exportStatus && <p className="mt-1 text-xs text-gray-300">{exportStatus}</p>}
+        </div>
+      )}
 
       <p className="mt-6 text-xs text-amber-400">Review before sharing.</p>
 

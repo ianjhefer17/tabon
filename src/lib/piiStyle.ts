@@ -22,7 +22,7 @@ export const TYPE_LABEL: Record<PiiType, string> = {
   other: 'Other',
 }
 
-export const SOURCE_LABEL: Record<PiiSource, string> = { regex: 'Rule', llm: 'AI' }
+export const SOURCE_LABEL: Record<PiiSource, string> = { regex: 'Rule', llm: 'AI', manual: 'You' }
 
 /** Partially masks detected text for the side panel: "0917 123 4567" → "0917 •••• 567". */
 export function maskText(text: string): string {
