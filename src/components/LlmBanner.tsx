@@ -9,6 +9,16 @@ export function LlmBanner({ llm }: { llm: LlmState }) {
       </div>
     )
   }
+  if (llm.status === 'paused') {
+    return (
+      <div role="status" className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-amber-500/30 bg-amber-500/10 px-6 py-2 text-sm text-amber-200">
+        <span>On phones the AI model is off to save memory — using rule-based detection only.</span>
+        <button type="button" onClick={llm.enableAi} className="rounded border border-amber-400/60 px-2 py-0.5 text-xs text-amber-100 hover:border-amber-300">
+          Try the Lite AI model (0.9 GB)
+        </button>
+      </div>
+    )
+  }
   if (llm.status === 'error' && llm.needsNetwork) {
     return (
       <div role="status" className="border-b border-amber-500/30 bg-amber-500/10 px-6 py-2 text-sm text-amber-200">

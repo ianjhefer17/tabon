@@ -131,7 +131,7 @@ function App() {
   // Stage 3: once OCR is done and the model is ready, scan with the LLM and merge its boxes in.
   useEffect(() => {
     if (!ocrDone || aiPhase !== 'waiting') return
-    if (llm.status === 'unsupported' || llm.status === 'error') {
+    if (llm.status === 'unsupported' || llm.status === 'paused' || llm.status === 'error') {
       setAiPhase('off')
       return
     }
@@ -453,7 +453,7 @@ function App() {
               console.error(err)
               aiPhase = 'failed'
             }
-          } else if (llm.status === 'unsupported' || llm.status === 'error') {
+          } else if (llm.status === 'unsupported' || llm.status === 'paused' || llm.status === 'error') {
             aiPhase = 'off'
           }
           if (session !== pdfSession.current) return
@@ -532,7 +532,7 @@ function App() {
 
   return (
     <div className="flex min-h-screen flex-col bg-gray-950 text-gray-100">
-      <Header offline={offline} aiAvailable={llm.status !== 'unsupported'} onPrivacy={() => setShowPrivacy(true)} />
+      <Header offline={offline} aiAvailable={llm.status !== 'unsupported' && llm.status !== 'paused'} onPrivacy={() => setShowPrivacy(true)} />
       {showPrivacy && <PrivacyModal onClose={() => setShowPrivacy(false)} />}
       <LlmBanner llm={llm} />
       <div className="flex flex-1 flex-col md:flex-row">

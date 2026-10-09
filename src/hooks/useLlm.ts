@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useState } from 'react'
 import { checkWebGPU, getSavedModel, loadLlm, saveModel, type LoadProgress, type ModelKey } from '../lib/llmPii'
 
-export type LlmStatus = 'checking' | 'unsupported' | 'loading' | 'ready' | 'error'
+/** 'paused': WebGPU works, but this is a phone, so the model waits for the user to opt in. */
+export type LlmStatus = 'checking' | 'unsupported' | 'paused' | 'loading' | 'ready' | 'error'
 
 export interface LlmState {
   status: LlmStatus
@@ -13,9 +14,15 @@ export interface LlmState {
   /** The load failed for lack of network: the model was never fully saved on this device. */
   needsNetwork: boolean
   setModelKey: (key: ModelKey) => void
+  /** Opt in on a phone: loads the Lite model for this visit only. */
+  enableAi: () => void
 }
 
-/** Checks WebGPU and loads the chosen model in the background as soon as the app opens. */
+/**
+ * Checks WebGPU and loads the chosen model in the background as soon as the app opens.
+ * Phones are the exception: iOS 26 exposes WebGPU, but loading a 1-2 GB model gets the tab
+ * killed for memory ("Can't open this page"), so phones start rules-only and load Lite on request.
+ */
 export function useLlm(): LlmState {
   const [status, setStatus] = useState<LlmStatus>('checking')
   const [progress, setProgress] = useState<LoadProgress | null>(null)
@@ -25,6 +32,8 @@ export function useLlm(): LlmState {
   const [needsNetwork, setNeedsNetwork] = useState(false)
   // Bumped to retry a load that failed offline once the connection is back.
   const [attempt, setAttempt] = useState(0)
+  // Not persisted: if the model crashes the tab, the next visit starts rules-only again.
+  const [optIn, setOptIn] = useState(false)
 
   useEffect(() => {
     let cancelled = false
@@ -34,6 +43,10 @@ export function useLlm(): LlmState {
       if (!gpu.ok) {
         console.info('WebGPU unavailable:', gpu.reason)
         setStatus('unsupported')
+        return
+      }
+      if (isPhone() && !optIn) {
+        setStatus('paused')
         return
       }
       setStatus('loading')
@@ -57,7 +70,7 @@ export function useLlm(): LlmState {
     return () => {
       cancelled = true
     }
-  }, [modelKey, attempt])
+  }, [modelKey, attempt, optIn])
 
   useEffect(() => {
     if (!(status === 'error' && needsNetwork)) return
@@ -70,9 +83,21 @@ export function useLlm(): LlmState {
     saveModel(key)
     setKey(key)
     // Not 'ready' until the new model has loaded, so no scan starts on the old one.
-    setStatus((s) => (s === 'unsupported' ? s : 'loading'))
+    setStatus((s) => (s === 'unsupported' || s === 'paused' ? s : 'loading'))
     setProgress(null)
   }, [])
 
-  return { status, progress, modelKey, modelId, error, needsNetwork, setModelKey }
+  const enableAi = useCallback(() => {
+    saveModel('lite')
+    setKey('lite')
+    setOptIn(true)
+  }, [])
+
+  return { status, progress, modelKey, modelId, error, needsNetwork, setModelKey, enableAi }
+}
+
+/** Phones and tablets (iPadOS reports itself as a Mac, so also check for touch). */
+function isPhone(): boolean {
+  const ua = navigator.userAgent
+  return /iPhone|iPad|iPod|Android/i.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1)
 }
