@@ -60,7 +60,6 @@ async function loadImage(url: string): Promise<HTMLImageElement> {
 function App() {
   const [boxes, setBoxes] = useState<Box[]>([])
   const [ocrDone, setOcrDone] = useState(false)
-  const [showOcr, setShowOcr] = useState(false)
   const [doc, setDoc] = useState<LoadedDoc | null>(null)
   const [words, setWords] = useState<Word[]>([])
   const [fullText, setFullText] = useState('')
@@ -385,7 +384,7 @@ function App() {
                 height={doc.height}
                 words={words}
                 boxes={boxes}
-                showWords={showOcr}
+                showWords={DEBUG}
                 onToggle={toggleGroup}
                 drawing={drawing}
                 onDraw={addManualBox}
@@ -403,9 +402,6 @@ function App() {
           boxes={boxes}
           onToggle={toggleGroup}
           onSetAll={setAll}
-          showOcr={showOcr}
-          onShowOcrChange={setShowOcr}
-          fullText={fullText}
           aiPhase={aiPhase}
           llm={llm}
           onModelChange={changeModel}

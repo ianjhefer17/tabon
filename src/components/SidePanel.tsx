@@ -12,10 +12,6 @@ interface SidePanelProps {
   boxes: Box[]
   onToggle: (group: string) => void
   onSetAll: (enabled: boolean) => void
-  /** TEMP debug: remove before submission. */
-  showOcr: boolean
-  onShowOcrChange: (show: boolean) => void
-  fullText: string
   aiPhase: AiPhase
   llm: LlmState
   onModelChange: (key: ModelKey) => void
@@ -55,9 +51,6 @@ export function SidePanel({
   boxes,
   onToggle,
   onSetAll,
-  showOcr,
-  onShowOcrChange,
-  fullText,
   aiPhase,
   llm,
   onModelChange,
@@ -187,17 +180,6 @@ export function SidePanel({
           {llm.status === 'unsupported' ? 'Needs WebGPU.' : 'Runs on your device. Lite is faster and smaller, Standard is more accurate.'}
         </span>
       </label>
-
-      {/* TEMP debug: remove before submission. */}
-      <label className="mt-6 flex items-center gap-2 text-xs text-gray-400">
-        <input type="checkbox" checked={showOcr} onChange={(e) => onShowOcrChange(e.target.checked)} />
-        Show OCR text
-      </label>
-      {showOcr && (
-        <pre data-testid="ocr-text" className="mt-2 max-h-96 overflow-auto rounded-md bg-gray-900 p-2 text-xs whitespace-pre-wrap text-gray-300">
-          {fullText || '(no OCR text yet)'}
-        </pre>
-      )}
     </aside>
   )
 }
