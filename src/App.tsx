@@ -33,6 +33,7 @@ function App() {
   const [boxes] = useState<Box[]>([])
   const [doc, setDoc] = useState<LoadedDoc | null>(null)
   const [words, setWords] = useState<Word[]>([])
+  const [fullText, setFullText] = useState('')
   const [status, setStatus] = useState(READY)
   const runId = useRef(0)
   const pdfRef = useRef<PdfDoc | null>(null)
@@ -63,6 +64,7 @@ function App() {
   const showAndOcr = async (id: number, next: LoadedDoc, source: OcrSource) => {
     setDoc(next)
     setWords([])
+    setFullText('')
     const label = next.numPages ? `${next.name} (page ${next.page} of ${next.numPages})` : next.name
     setStatus(`Reading text from ${label}… 0%`)
     const result = await runOcr(source, (percent, step) => {
@@ -70,6 +72,7 @@ function App() {
     })
     if (id !== runId.current) return
     setWords(result.words)
+    setFullText(result.fullText)
     setStatus(`Found ${result.words.length} words in ${label}. Review before sharing.`)
   }
 
@@ -133,6 +136,7 @@ function App() {
     closePdf()
     setDoc(null)
     setWords([])
+    setFullText('')
     setStatus(READY)
   }
 
@@ -179,7 +183,7 @@ function App() {
           )}
           <SampleRow onFile={handleFile} />
         </main>
-        <SidePanel boxes={boxes} />
+        <SidePanel boxes={boxes} fullText={fullText} />
       </div>
       <StatusBar message={status} />
     </div>

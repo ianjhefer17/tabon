@@ -1,4 +1,4 @@
-import { createWorker, type Worker } from 'tesseract.js'
+import { createWorker, type PSM, type Worker } from 'tesseract.js'
 import type { Word } from '../types'
 
 export interface OcrResult {
@@ -13,7 +13,20 @@ export type OcrProgress = (percent: number, status: string) => void
 
 export type OcrSource = HTMLImageElement | HTMLCanvasElement | ImageBitmap
 
-const MIN_OCR_WIDTH = 2000
+/** Preprocessing and segmentation settings. DEFAULT_TUNING is what the app uses. */
+export interface OcrTuning {
+  /** Upscale so the image is at least this wide (never downscales). */
+  minWidth: number
+  /** Gray level 0-255 to binarize at before OCR, or null to let Tesseract threshold. */
+  binarize: number | null
+  /** Tesseract page segmentation mode: '3' = automatic layout, '6' = single uniform block. */
+  psm: '3' | '6'
+}
+
+// Chosen on the 4 samples + 3 simulated phone photos (shadow, blur, tilt, low-res), 31 key PII values:
+//   PSM 6: 31/31 · PSM 3 (auto): 30/31 · 2.5x upscale: 30/31 at 2x the time ·
+//   fixed binarize @128: 28/31, @160: 24/31 (fails on shadowed photos; Sauvola already adapts).
+export const DEFAULT_TUNING: OcrTuning = { minWidth: 2000, binarize: null, psm: '6' }
 
 // All Tesseract assets are self-hosted under /public/tesseract (see scripts/copy-assets.mjs).
 // Absolute URLs because the worker resolves paths relative to its own script.
@@ -73,9 +86,9 @@ function sourceSize(src: OcrSource): { width: number; height: number } {
   return { width: src.width, height: src.height }
 }
 
-/** Draws the image upscaled to at least MIN_OCR_WIDTH and converted to grayscale. */
-function preprocess(src: OcrSource, width: number, height: number): { canvas: HTMLCanvasElement; scale: number } {
-  const scale = Math.max(1, MIN_OCR_WIDTH / width)
+/** Draws the image upscaled to at least tuning.minWidth, in grayscale, optionally binarized. */
+function preprocess(src: OcrSource, width: number, height: number, tuning: OcrTuning): { canvas: HTMLCanvasElement; scale: number } {
+  const scale = Math.max(1, tuning.minWidth / width)
   const canvas = document.createElement('canvas')
   canvas.width = Math.round(width * scale)
   canvas.height = Math.round(height * scale)
@@ -90,26 +103,27 @@ function preprocess(src: OcrSource, width: number, height: number): { canvas: HT
   const d = img.data
   for (let i = 0; i < d.length; i += 4) {
     const y = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2]
-    d[i] = d[i + 1] = d[i + 2] = y
+    d[i] = d[i + 1] = d[i + 2] = tuning.binarize === null ? y : y < tuning.binarize ? 0 : 255
   }
   ctx.putImageData(img, 0, 0)
   return { canvas, scale }
 }
 
-export function runOcr(src: OcrSource, onProgress?: OcrProgress): Promise<OcrResult> {
-  const run = queue.then(() => recognizeImage(src, onProgress))
+export function runOcr(src: OcrSource, onProgress?: OcrProgress, tuning: OcrTuning = DEFAULT_TUNING): Promise<OcrResult> {
+  const run = queue.then(() => recognizeImage(src, tuning, onProgress))
   queue = run.catch(() => undefined)
   return run
 }
 
-async function recognizeImage(src: OcrSource, onProgress?: OcrProgress): Promise<OcrResult> {
+async function recognizeImage(src: OcrSource, tuning: OcrTuning, onProgress?: OcrProgress): Promise<OcrResult> {
   const { width, height } = sourceSize(src)
   currentProgress = onProgress
   lastPercent = 0
   onProgress?.(0, 'preparing image')
   try {
     const worker = await getWorker()
-    const { canvas, scale } = preprocess(src, width, height)
+    await worker.setParameters({ tessedit_pageseg_mode: tuning.psm as PSM })
+    const { canvas, scale } = preprocess(src, width, height, tuning)
     const { data } = await worker.recognize(canvas, {}, { blocks: true, text: false })
 
     const words: Word[] = []
