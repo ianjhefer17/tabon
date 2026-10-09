@@ -1,5 +1,7 @@
 # Tabon
 
+**Live demo: https://tabon-one.vercel.app** (Chrome 121+ with WebGPU for the AI model)
+
 **Black out the personal info on an ID, payslip or bank statement before you send it, using AI that runs entirely in your browser. The document never leaves your device.**
 
 ![Tabon with the fictional payslip sample scanned: TIN, SSS, PhilHealth, Pag-IBIG and payroll account numbers boxed for redaction](docs/screenshot.png)
