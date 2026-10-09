@@ -18,6 +18,8 @@ interface SidePanelProps {
   redactStyle: RedactStyle
   onRedactStyleChange: (style: RedactStyle) => void
   onExport: () => void
+  /** Set for multi-page PDFs: download every page, redacted, as one PDF. */
+  onExportAll?: () => void
   onCopy: () => void
   exporting: boolean
   /** Result of the last copy/export, e.g. "Copied" or an error. */
@@ -57,6 +59,7 @@ export function SidePanel({
   redactStyle,
   onRedactStyleChange,
   onExport,
+  onExportAll,
   onCopy,
   exporting,
   exportStatus,
@@ -144,8 +147,18 @@ export function SidePanel({
             disabled={exporting}
             className="mt-3 w-full rounded-md bg-emerald-500 px-4 py-3 text-base font-semibold text-gray-950 hover:bg-emerald-400 disabled:opacity-60"
           >
-            {exporting ? 'Redacting…' : 'Redact & Download'}
+            {exporting ? 'Redacting…' : onExportAll ? 'Redact & Download this page' : 'Redact & Download'}
           </button>
+          {onExportAll && (
+            <button
+              type="button"
+              onClick={onExportAll}
+              disabled={exporting}
+              className="mt-2 w-full rounded-md border border-emerald-500/60 px-4 py-2 text-sm font-semibold text-emerald-300 hover:border-emerald-400 disabled:opacity-60"
+            >
+              Download all pages (PDF)
+            </button>
+          )}
           <button
             type="button"
             onClick={onCopy}
@@ -154,7 +167,9 @@ export function SidePanel({
           >
             Copy to clipboard
           </button>
-          <p className="mt-2 text-[11px] text-gray-500">Metadata (EXIF/GPS) removed</p>
+          <p className="mt-2 text-[11px] text-gray-500">
+            Metadata (EXIF/GPS) removed{onExportAll && '. The PDF holds page images only: no original text layer.'}
+          </p>
           {aiPhase === 'scanning' && <p className="mt-1 text-[11px] text-violet-300">The AI scan is still running and may add more boxes.</p>}
           {exportStatus && <p className="mt-1 text-xs text-gray-300">{exportStatus}</p>}
         </div>

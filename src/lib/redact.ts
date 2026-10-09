@@ -83,6 +83,11 @@ export function redactedFileName(name: string, page?: number, numPages?: number)
   return `${base}${pageTag}-redacted.png`
 }
 
+/** "statement.pdf" → "statement-redacted.pdf". */
+export function redactedPdfName(name: string): string {
+  return `${name.replace(/\.[^./]+$/, '') || 'document'}-redacted.pdf`
+}
+
 export function downloadBlob(blob: Blob, fileName: string) {
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')

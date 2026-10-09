@@ -1,16 +1,21 @@
 import { GlobalWorkerOptions, PasswordException, getDocument, type PDFDocumentProxy } from 'pdfjs-dist'
+import { PDFDocument } from 'pdf-lib'
 
 // pdf.js worker and data are self-hosted under /public/pdfjs (see scripts/copy-assets.mjs).
 const PDFJS_BASE = new URL(`${import.meta.env.BASE_URL}pdfjs/`, window.location.href).href
 GlobalWorkerOptions.workerSrc = `${PDFJS_BASE}pdf.worker.min.mjs`
 
-const TARGET_WIDTH = 2000
-const MAX_SCALE = 4
+/** Page render scale: 2 canvas pixels per PDF point (144 dpi). */
+export const PAGE_SCALE = 2
+/** Thumbnail width in CSS pixels (rendered at 2x for sharp display). */
+const THUMB_WIDTH = 96
 
 export interface PdfDoc {
   numPages: number
-  /** Renders a page (1-based) on a white canvas at least TARGET_WIDTH px wide. */
+  /** Renders a page (1-based) on a white canvas at PAGE_SCALE. */
   renderPage(pageNumber: number): Promise<HTMLCanvasElement>
+  /** Renders a small preview of a page (1-based). */
+  renderThumb(pageNumber: number): Promise<HTMLCanvasElement>
   destroy(): Promise<void>
 }
 
@@ -33,22 +38,41 @@ export async function openPdf(file: File): Promise<PdfDoc> {
     throw err
   }
 
+  const render = async (pageNumber: number, scaleFor: (pointWidth: number) => number) => {
+    const page = await pdf.getPage(pageNumber)
+    const viewport = page.getViewport({ scale: scaleFor(page.getViewport({ scale: 1 }).width) })
+    const canvas = document.createElement('canvas')
+    canvas.width = Math.floor(viewport.width)
+    canvas.height = Math.floor(viewport.height)
+    await page.render({ canvas, viewport, background: '#ffffff' }).promise
+    page.cleanup()
+    return canvas
+  }
+
   return {
     numPages: pdf.numPages,
-    async renderPage(pageNumber) {
-      const page = await pdf.getPage(pageNumber)
-      const base = page.getViewport({ scale: 1 })
-      const scale = Math.min(MAX_SCALE, Math.max(1, TARGET_WIDTH / base.width))
-      const viewport = page.getViewport({ scale })
-      const canvas = document.createElement('canvas')
-      canvas.width = Math.floor(viewport.width)
-      canvas.height = Math.floor(viewport.height)
-      await page.render({ canvas, viewport, background: '#ffffff' }).promise
-      page.cleanup()
-      return canvas
-    },
+    renderPage: (n) => render(n, () => PAGE_SCALE),
+    renderThumb: (n) => render(n, (w) => (THUMB_WIDTH * 2) / w),
     destroy: () => task.destroy(),
   }
+}
+
+/**
+ * Builds a PDF with one page per PNG, each page sized to its image at PAGE_SCALE.
+ * The pages are images only: no text layer, links, forms or metadata from the original survive.
+ */
+export async function imagesToPdf(pngs: Blob[]): Promise<Blob> {
+  const out = await PDFDocument.create()
+  out.setProducer('Tabon')
+  out.setCreator('Tabon')
+  for (const png of pngs) {
+    const img = await out.embedPng(new Uint8Array(await png.arrayBuffer()))
+    const w = img.width / PAGE_SCALE
+    const h = img.height / PAGE_SCALE
+    out.addPage([w, h]).drawImage(img, { x: 0, y: 0, width: w, height: h })
+  }
+  const bytes = await out.save()
+  return new Blob([bytes as Uint8Array<ArrayBuffer>], { type: 'application/pdf' })
 }
 
 export function canvasToBlob(canvas: HTMLCanvasElement): Promise<Blob> {

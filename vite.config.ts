@@ -63,8 +63,9 @@ export default defineConfig({
       },
       workbox: {
         // Precache the app shell plus everything under /public: /tesseract/** (worker, wasm cores,
-        // eng.traineddata.gz), /pdfjs/** and /samples/**. Model weights are cached by WebLLM itself.
-        globPatterns: ['**/*.{js,css,html,svg,png,webmanifest,wasm,mjs,gz,bcmap,pfb,ttf,icc}'],
+        // eng.traineddata.gz), /pdfjs/** (worker, CMaps, fonts, decoders; whole folder, any file type)
+        // and /samples/**. Model weights are cached by WebLLM itself.
+        globPatterns: ['**/*.{js,css,html,svg,png,webmanifest,wasm,mjs,gz,bcmap,pfb,ttf,icc}', 'pdfjs/**/*'],
         // macOS resource forks appear when the repo lives on an exFAT drive.
         globIgnores: ['**/._*'],
         // The Tesseract cores are ~4 MB each; the largest bundle chunk (web-llm) is a few MB.

@@ -20,6 +20,7 @@ npm test
 - @mlc-ai/web-llm (in-browser LLM on WebGPU, runs in a Web Worker)
 - Qwen2.5-3B-Instruct (default, Qwen Research License) and Qwen2.5-1.5B-Instruct (Lite, Apache-2.0) by the Qwen team, Alibaba Cloud, in MLC q4f16_1 builds (q4f32_1 on GPUs without f16). Weights download once from huggingface.co/mlc-ai and the WebGPU kernels from raw.githubusercontent.com/mlc-ai/binary-mlc-llm-libs (or from this machine after `npm run models`), then stay in the browser's IndexedDB.
 - pdfjs-dist (PDF rendering), with its worker, CMaps, standard fonts (Foxit, Liberation Sans) and image-decoder wasm (OpenJPEG, JBIG2, QCMS) self-hosted under `public/pdfjs/`
+- pdf-lib (builds the "Download all pages" PDF in the browser from the redacted page images only, so no original text layer survives)
 - vite-plugin-pwa (Workbox service worker that precaches the app, OCR files and samples; web app manifest)
 - rsvg-convert (librsvg; rendered the shield icon `public/favicon.svg` to `icon-192.png` / `icon-512.png`)
 - oxlint (linting), vitest (unit tests)
