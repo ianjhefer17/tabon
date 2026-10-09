@@ -52,7 +52,7 @@ npm run build && npm run preview
 
 `vite` and `vite preview` then serve them at `/models/`, and the build points the app there for each downloaded model, so a new browser profile fills its cache from local disk in about a minute. The browser cache is keyed by URL: a model already cached from Hugging Face is fetched again once from `/models/`.
 
-The AI looks for names, addresses and ID/account numbers. Phones, emails and dates are left to the rules, which find them reliably and instantly.
+Right after loading, the app sends the model one short throwaway request: the GPU's first real prompt ran several times slower than later ones (on an M1, the first scan took 23 s instead of 10–14 s; with the warm-up, 15 s).
 
 `npm install` also runs `scripts/patch-webllm.mjs`, a one-line patch to web-llm: its IndexedDB cache checked whether weight files exist by reading every one (all 1.7 GB), twice per start (once in `hasModelInCache`, once before loading). The patch checks keys only (`getKey`). Measured: cached model ready in ~35 s instead of ~145 s.
 

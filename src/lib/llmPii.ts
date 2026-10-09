@@ -93,6 +93,7 @@ async function loadNow(key: ModelKey, f16: boolean, onProgress?: (p: LoadProgres
     }
   }
   loadedModelId = modelId
+  warmUp()
   return modelId
 }
 
@@ -271,6 +272,43 @@ function debugEnabled(): boolean {
 // One request at a time: the engine is single-threaded.
 let queue: Promise<unknown> = Promise.resolve()
 
+function enqueue<T>(task: () => Promise<T>): Promise<T> {
+  const run = queue.then(task)
+  queue = run.catch(() => undefined)
+  return run
+}
+
+/** One model request with the fixed system prompt and worked example. */
+async function ask(engine: WebWorkerMLCEngine, text: string, maxTokens: number): Promise<string> {
+  const reply = await engine.chat.completions.create({
+    messages: [
+      { role: 'system', content: SYSTEM_PROMPT },
+      { role: 'user', content: EXAMPLE_INPUT },
+      { role: 'assistant', content: EXAMPLE_OUTPUT },
+      { role: 'user', content: USER_PREFIX + text },
+    ],
+    temperature: 0,
+    max_tokens: maxTokens,
+    response_format: { type: 'json_object', schema: PII_SCHEMA },
+  })
+  if (debugEnabled()) console.info('[tabon/llm] usage:', JSON.stringify(reply.usage))
+  return reply.choices[0]?.message?.content ?? ''
+}
+
+/**
+ * A throwaway request right after loading. The GPU's first real prompt ran ~4x slower than later
+ * ones (measured on an M1: 37 vs 120-150 prompt tokens/s, a 23 s first scan instead of 10-14 s),
+ * so this pays that cost before the user's first scan, which simply queues behind it.
+ */
+function warmUp() {
+  enqueue(async () => {
+    if (!engine) return
+    const t0 = performance.now()
+    await ask(engine, EXAMPLE_INPUT.slice(USER_PREFIX.length), 4)
+    if (debugEnabled()) console.info(`[tabon/llm] warm-up ${Math.round(performance.now() - t0)} ms`)
+  }).catch((err) => console.warn('AI warm-up failed', err))
+}
+
 /**
  * Finds PII with the LLM. `isCancelled` is checked between chunks, so a superseded scan (new
  * document, new model) stops early. We deliberately don't use engine.interruptGenerate(): in
@@ -278,23 +316,12 @@ let queue: Promise<unknown> = Promise.resolve()
  * later non-streaming request returns "" instantly (or throws "Message error should not be 0").
  */
 export function detectLlm(fullText: string, isCancelled: () => boolean = () => false): Promise<Span[]> {
-  const run = queue.then(async () => {
+  return enqueue(async () => {
     if (!engine) throw new Error('AI model is not loaded')
     const items: LlmItem[] = []
     for (const chunk of chunkText(fullText)) {
       if (isCancelled()) return []
-      const reply = await engine.chat.completions.create({
-        messages: [
-          { role: 'system', content: SYSTEM_PROMPT },
-          { role: 'user', content: EXAMPLE_INPUT },
-          { role: 'assistant', content: EXAMPLE_OUTPUT },
-          { role: 'user', content: USER_PREFIX + chunk },
-        ],
-        temperature: 0,
-        max_tokens: 1024,
-        response_format: { type: 'json_object', schema: PII_SCHEMA },
-      })
-      const content = reply.choices[0]?.message?.content ?? ''
+      const content = await ask(engine, chunk, 1024)
       if (debugEnabled()) console.info('[tabon/llm] raw output:', content)
       items.push(...parseLlmJson(content))
     }
@@ -304,6 +331,4 @@ export function detectLlm(fullText: string, isCancelled: () => boolean = () => f
     }
     return spans
   })
-  queue = run.catch(() => undefined)
-  return run
 }
