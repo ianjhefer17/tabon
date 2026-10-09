@@ -19,4 +19,14 @@ npm run preview
 - pdfjs-dist (PDF rendering)
 - vite-plugin-pwa (offline caching)
 - oxlint (linting)
+- Python + Pillow (generating fictional sample documents)
 - Claude Code (AI coding assistant used during development)
+
+## Sample documents
+
+`public/samples/` holds FICTIONAL documents (invented people, numbers, addresses and companies), all watermarked "SAMPLE — FICTIONAL DATA". Regenerate them with:
+
+```
+python3 -m venv .venv && .venv/bin/pip install pillow
+.venv/bin/python scripts/make_samples.py
+```

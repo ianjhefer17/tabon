@@ -24,7 +24,7 @@ export function DropZone({ onFile }: DropZoneProps) {
         if (file) onFile(file)
       }}
       onClick={() => inputRef.current?.click()}
-      className={`flex h-full min-h-80 cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed p-8 text-center transition-colors ${
+      className={`flex min-h-64 flex-1 cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed p-8 text-center transition-colors ${
         dragging ? 'border-amber-400 bg-amber-400/10' : 'border-gray-700 hover:border-gray-500'
       }`}
     >
