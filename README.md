@@ -9,6 +9,7 @@ npm install
 npm run dev
 npm run build
 npm run preview
+npm test
 ```
 
 ## Disclosures
@@ -19,7 +20,7 @@ npm run preview
 - @mlc-ai/web-llm (in-browser LLM on WebGPU), models Qwen2.5-3B-Instruct-q4f16_1-MLC (fallback Qwen2.5-1.5B-Instruct-q4f16_1-MLC)
 - pdfjs-dist (PDF rendering), with its worker, CMaps, standard fonts (Foxit, Liberation Sans) and image-decoder wasm (OpenJPEG, JBIG2, QCMS) self-hosted under `public/pdfjs/`
 - vite-plugin-pwa (offline caching)
-- oxlint (linting)
+- oxlint (linting), vitest (unit tests)
 - Python + Pillow (generating fictional sample documents)
 - Claude Code (AI coding assistant used during development)
 
