@@ -43,6 +43,8 @@ rsvg-convert -w 512 -h 512 public/favicon.svg -o public/icon-512.png
 
 On first visit the app downloads the AI model in the background (Standard 1.7 GB, Lite 0.9 GB; switch in the side panel). After that it loads from the browser's storage with no network. Without WebGPU the app falls back to rule-based detection only.
 
+`npm install` also runs `scripts/patch-webllm.mjs`, a one-line patch to web-llm: its IndexedDB cache checked whether weight files exist by reading every one (all 1.7 GB), twice per start (once in `hasModelInCache`, once before loading). The patch checks keys only (`getKey`). Measured on the external-drive profile: cached model ready in ~35 s instead of ~145 s.
+
 For a demo machine with little free disk, a Chrome profile on an external drive keeps the model there:
 
 ```

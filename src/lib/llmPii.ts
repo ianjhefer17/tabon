@@ -72,7 +72,7 @@ async function loadNow(key: ModelKey, f16: boolean, onProgress?: (p: LoadProgres
   const modelId = f16 ? MODELS[key].id : MODELS[key].f32Id
   const webllm = await import('@mlc-ai/web-llm')
   const appConfig = makeAppConfig(webllm)
-  const fromCache = await webllm.hasModelInCache(modelId, appConfig).catch(() => false)
+  const fromCache = await isModelCached(modelId)
   const initProgressCallback = (r: { progress: number; text: string }) =>
     onProgress?.({ percent: Math.round(r.progress * 100), text: r.text, fromCache })
 
@@ -103,9 +103,10 @@ function makeAppConfig(webllm: typeof import('@mlc-ai/web-llm')): AppConfig {
   return { ...webllm.prebuiltAppConfig, cacheBackend: 'indexeddb' }
 }
 
-/** True when the model's weights are stored on this device (web-llm checks the weight index only). */
+/** True when every weight shard of the model is stored on this device. */
 export async function isModelCached(modelId: string): Promise<boolean> {
   const webllm = await import('@mlc-ai/web-llm')
+  // Fast only with scripts/patch-webllm.mjs applied; unpatched, this reads all weights from disk.
   return webllm.hasModelInCache(modelId, makeAppConfig(webllm)).catch(() => false)
 }
 
