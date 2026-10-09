@@ -128,12 +128,14 @@ async function recognizeImage(src: OcrSource, tuning: OcrTuning, onProgress?: Oc
 
     const words: Word[] = []
     let fullText = ''
+    let lineCount = 0
     for (const block of data.blocks ?? []) {
       for (const para of block.paragraphs) {
         for (const line of para.lines) {
           const lineWords = line.words.filter((w) => w.text.trim() !== '')
           if (lineWords.length === 0) continue
           if (fullText) fullText += '\n'
+          const lineIndex = lineCount++
           lineWords.forEach((w, i) => {
             if (i > 0) fullText += ' '
             const text = w.text.trim()
@@ -143,6 +145,7 @@ async function recognizeImage(src: OcrSource, tuning: OcrTuning, onProgress?: Oc
               text,
               charStart,
               charEnd: fullText.length,
+              line: lineIndex,
               bbox: {
                 x0: w.bbox.x0 / scale,
                 y0: w.bbox.y0 / scale,

@@ -10,6 +10,8 @@ export interface Word {
   bbox: BBox
   charStart: number
   charEnd: number
+  /** 0-based OCR line index (one per '\n'-separated line of fullText). */
+  line: number
 }
 
 export type PiiType =
@@ -38,4 +40,8 @@ export interface Box {
   source: PiiSource
   bbox: BBox
   enabled: boolean
+  /** Detection this box belongs to; a span crossing lines yields one box per line, same group. */
+  group: string
+  /** The detected text (whole span, not just this line). */
+  text: string
 }

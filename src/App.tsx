@@ -3,11 +3,13 @@ import { DocumentView } from './components/DocumentView'
 import { DropZone } from './components/DropZone'
 import { Header } from './components/Header'
 import { SampleRow } from './components/SampleRow'
-import { SidePanel } from './components/SidePanel'
+import { SidePanel, type PanelPhase } from './components/SidePanel'
 import { StatusBar } from './components/StatusBar'
+import { mergeBoxes, spansToBoxes } from './lib/match'
 import { runOcr, type OcrSource } from './lib/ocr'
 import { canvasToBlob, openPdf, type PdfDoc } from './lib/pdf'
 import { useUpdateReady } from './lib/pwa'
+import { detectRegex } from './lib/regexPii'
 import type { Box, Word } from './types'
 
 interface LoadedDoc {
@@ -30,7 +32,9 @@ async function loadImage(url: string): Promise<HTMLImageElement> {
 }
 
 function App() {
-  const [boxes] = useState<Box[]>([])
+  const [boxes, setBoxes] = useState<Box[]>([])
+  const [ocrDone, setOcrDone] = useState(false)
+  const [showOcr, setShowOcr] = useState(false)
   const [doc, setDoc] = useState<LoadedDoc | null>(null)
   const [words, setWords] = useState<Word[]>([])
   const [fullText, setFullText] = useState('')
@@ -65,15 +69,21 @@ function App() {
     setDoc(next)
     setWords([])
     setFullText('')
+    setBoxes([])
+    setOcrDone(false)
     const label = next.numPages ? `${next.name} (page ${next.page} of ${next.numPages})` : next.name
     setStatus(`Reading text from ${label}… 0%`)
     const result = await runOcr(source, (percent, step) => {
       if (id === runId.current) setStatus(`Reading text from ${label}… ${percent}% (${step})`)
     })
     if (id !== runId.current) return
+    const found = mergeBoxes(spansToBoxes(detectRegex(result.fullText), result.words))
+    const count = new Set(found.map((b) => b.group)).size
     setWords(result.words)
     setFullText(result.fullText)
-    setStatus(`Found ${result.words.length} words in ${label}. Review before sharing.`)
+    setBoxes(found)
+    setOcrDone(true)
+    setStatus(`Found ${count} possible personal ${count === 1 ? 'detail' : 'details'} in ${label}. Review before sharing.`)
   }
 
   const showPdfPage = async (id: number, pdf: PdfDoc, name: string, page: number) => {
@@ -137,8 +147,18 @@ function App() {
     setDoc(null)
     setWords([])
     setFullText('')
+    setBoxes([])
+    setOcrDone(false)
     setStatus(READY)
   }
+
+  const toggleGroup = (group: string) =>
+    setBoxes((bs) => {
+      const next = !bs.filter((b) => b.group === group).every((b) => b.enabled)
+      return bs.map((b) => (b.group === group ? { ...b, enabled: next } : b))
+    })
+  const setAll = (enabled: boolean) => setBoxes((bs) => bs.map((b) => ({ ...b, enabled })))
+  const phase: PanelPhase = !doc ? 'empty' : ocrDone ? 'done' : 'reading'
 
   return (
     <div className="flex min-h-screen flex-col bg-gray-950 text-gray-100">
@@ -176,14 +196,30 @@ function App() {
                   </button>
                 </div>
               </div>
-              <DocumentView src={doc.url} width={doc.width} height={doc.height} words={words} />
+              <DocumentView
+                src={doc.url}
+                width={doc.width}
+                height={doc.height}
+                words={words}
+                boxes={boxes}
+                showWords={showOcr}
+                onToggle={toggleGroup}
+              />
             </div>
           ) : (
             <DropZone onFile={handleFile} />
           )}
           <SampleRow onFile={handleFile} />
         </main>
-        <SidePanel boxes={boxes} fullText={fullText} />
+        <SidePanel
+          phase={phase}
+          boxes={boxes}
+          onToggle={toggleGroup}
+          onSetAll={setAll}
+          showOcr={showOcr}
+          onShowOcrChange={setShowOcr}
+          fullText={fullText}
+        />
       </div>
       <StatusBar message={status} />
     </div>
