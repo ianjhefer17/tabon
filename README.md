@@ -91,19 +91,6 @@ The first load downloads the AI model once in the background (progress shows in 
 
 For the most realistic offline test, use the production build (`npm run build && npm run preview`, then open the printed URL), since the service worker that caches the app is only active there.
 
-## Measured performance
-
-> **TODO: numbers pending.** This table will be filled only from the in-app benchmark (open the app with `?debug=1`, click **Run benchmark**; results also print to the console as `[tabon-bench]`). No numbers here are estimated.
-
-| Sample | OCR (ms) | Rule hits | AI (ms) | AI hits | Merged |
-|---|---|---|---|---|---|
-| id_card.png | | | | | |
-| bank_statement.png | | | | | |
-| payslip.png | | | | | |
-| utility_bill.png | | | | | |
-
-Machine / browser / model: _TBD_
-
 ## Disclosures
 
 **Runtime libraries** (versions installed from `package.json`)

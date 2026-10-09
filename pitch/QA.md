@@ -65,7 +65,7 @@ Options we'd explore (not validated yet):
 
 ### Quick backup lines
 
-- **Why "Tabon"?** Filipino for "to cover up". You cover what's not theirs to see.
+- **Why "Tabon"?** Tagalog for "cover" or "lid". You cover what's not theirs to see.
 - **PDF?** Yes. Pages render locally with self-hosted pdf.js; export is image-only, so no hidden text layer survives.
 - **Accuracy numbers?** We don't quote numbers we haven't measured. Show it live on the sample documents instead.
 - **Sample documents?** All fictional and watermarked SAMPLE.
