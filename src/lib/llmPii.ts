@@ -71,10 +71,7 @@ export function loadLlm(key: ModelKey, f16: boolean, onProgress?: (p: LoadProgre
 async function loadNow(key: ModelKey, f16: boolean, onProgress?: (p: LoadProgress) => void): Promise<string> {
   const modelId = f16 ? MODELS[key].id : MODELS[key].f32Id
   const webllm = await import('@mlc-ai/web-llm')
-  // Store weights in IndexedDB. The default Cache API backend streams each download straight into
-  // the cache, which failed in testing ("Cache.add() encountered a network error") for the large
-  // Hugging Face shards even though the same files fetched fine.
-  const appConfig: AppConfig = { ...webllm.prebuiltAppConfig, cacheBackend: 'indexeddb' }
+  const appConfig = makeAppConfig(webllm)
   const fromCache = await webllm.hasModelInCache(modelId, appConfig).catch(() => false)
   const initProgressCallback = (r: { progress: number; text: string }) =>
     onProgress?.({ percent: Math.round(r.progress * 100), text: r.text, fromCache })
@@ -97,6 +94,19 @@ async function loadNow(key: ModelKey, f16: boolean, onProgress?: (p: LoadProgres
   }
   loadedModelId = modelId
   return modelId
+}
+
+// Store weights in IndexedDB. The default Cache API backend streams each download straight into
+// the cache, which failed in testing ("Cache.add() encountered a network error") for the large
+// Hugging Face shards even though the same files fetched fine.
+function makeAppConfig(webllm: typeof import('@mlc-ai/web-llm')): AppConfig {
+  return { ...webllm.prebuiltAppConfig, cacheBackend: 'indexeddb' }
+}
+
+/** True when the model's weights are stored on this device (web-llm checks the weight index only). */
+export async function isModelCached(modelId: string): Promise<boolean> {
+  const webllm = await import('@mlc-ai/web-llm')
+  return webllm.hasModelInCache(modelId, makeAppConfig(webllm)).catch(() => false)
 }
 
 export function isLlmReady(): boolean {

@@ -5,10 +5,12 @@ import { DropZone } from './components/DropZone'
 import { ExportModal } from './components/ExportModal'
 import { Header } from './components/Header'
 import { LlmBanner } from './components/LlmBanner'
+import { PrivacyModal } from './components/PrivacyModal'
 import { SampleRow } from './components/SampleRow'
 import { SidePanel, type AiPhase, type PanelPhase } from './components/SidePanel'
 import { StatusBar } from './components/StatusBar'
 import { useLlm } from './hooks/useLlm'
+import { useOfflineStatus } from './hooks/useOfflineStatus'
 import { detectLlm, type ModelKey } from './lib/llmPii'
 import { dropCoveredSpans, mergeBoxes, spansToBoxes } from './lib/match'
 import { runOcr, type OcrSource } from './lib/ocr'
@@ -67,6 +69,7 @@ function App() {
   const [timings, setTimings] = useState<Timings>({})
   const [redactStyle, setRedactStyle] = useState<RedactStyle>('black')
   const [drawing, setDrawing] = useState(false)
+  const [showPrivacy, setShowPrivacy] = useState(false)
   const [exporting, setExporting] = useState(false)
   const [exportStatus, setExportStatus] = useState('')
   const [copyStatus, setCopyStatus] = useState('')
@@ -78,6 +81,7 @@ function App() {
   const pdfRef = useRef<PdfDoc | null>(null)
   const updateReady = useUpdateReady()
   const llm = useLlm()
+  const offline = useOfflineStatus(llm)
 
   // Stage 3: once OCR is done and the model is ready, scan with the LLM and merge its boxes in.
   useEffect(() => {
@@ -327,7 +331,8 @@ function App() {
 
   return (
     <div className="flex min-h-screen flex-col bg-gray-950 text-gray-100">
-      <Header />
+      <Header offline={offline} aiAvailable={llm.status !== 'unsupported'} onPrivacy={() => setShowPrivacy(true)} />
+      {showPrivacy && <PrivacyModal onClose={() => setShowPrivacy(false)} />}
       <LlmBanner llm={llm} />
       <div className="flex flex-1 flex-col md:flex-row">
         <main className="flex flex-1 flex-col p-6">
